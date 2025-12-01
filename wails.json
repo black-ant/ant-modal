@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "modal-manager",
+  "outputfilename": "modal-manager",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "http://localhost:34115",
+  "author": {
+    "name": "20043376",
+    "email": "zengzhigang@lppz.com"
+  }
+}

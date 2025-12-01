@@ -1,0 +1,48 @@
+[
+  {
+    "id": "comfyui_flux_modular",
+    "name": "ComfyUI Flux 模块化",
+    "description": "模块化的 ComfyUI Flux 图像生成服务，拆分自单文件脚本",
+    "status": "stopped",
+    "createdAt": "2025-11-26T00:00:00+08:00",
+    "updatedAt": "2025-11-26T00:00:00+08:00",
+    "scripts": [
+      {
+        "id": "deploy",
+        "name": "部署应用",
+        "command": "modal deploy app.py",
+        "description": "部署 ComfyUI Flux 应用到 Modal 云平台"
+      },
+      {
+        "id": "serve",
+        "name": "开发模式",
+        "command": "modal serve app.py",
+        "description": "启动开发服务器，支持热重载"
+      },
+      {
+        "id": "logs",
+        "name": "查看日志",
+        "command": "modal app logs example-comfyapp",
+        "description": "查看应用运行日志"
+      },
+      {
+        "id": "logs-follow",
+        "name": "实时日志",
+        "command": "modal app logs example-comfyapp --follow",
+        "description": "实时跟踪日志输出"
+      },
+      {
+        "id": "stop",
+        "name": "停止应用",
+        "command": "modal app stop example-comfyapp",
+        "description": "停止正在运行的应用"
+      },
+      {
+        "id": "shell",
+        "name": "进入容器",
+        "command": "modal shell example-comfyapp",
+        "description": "进入容器进行调试"
+      }
+    ]
+  }
+]
