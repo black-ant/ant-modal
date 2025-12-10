@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, Cloud, Bot, BookTemplate, Zap, Palette, Globe, History } from 'lucide-react';
+import { Package, Cloud, Bot, BookTemplate, Zap, Palette, Globe, History, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
@@ -8,6 +8,12 @@ const navItems = [
     items: [
       { name: '我的项目', path: '/', icon: Package },
       { name: 'Modal Apps', path: '/apps', icon: Cloud },
+    ],
+  },
+  {
+    title: '学习',
+    items: [
+      { name: 'Modal 教程', path: '/tutorial', icon: BookOpen },
     ],
   },
   {

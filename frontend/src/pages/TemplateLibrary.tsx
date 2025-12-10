@@ -41,7 +41,7 @@ const projectTemplates: ProjectTemplate[] = [
     id: 'stable-diffusion',
     name: 'Stable Diffusion 图像生成',
     description: '使用 SDXL 模型生成高质量图像，支持电商产品图、社媒营销图等业务场景',
-    category: 'AI服务',
+    category: '图像生成',
     icon: 'sparkles',
     tags: ['SDXL', '图像生成', 'AI', 'GPU', '电商', '营销'],
     scripts: [
@@ -96,7 +96,7 @@ const projectTemplates: ProjectTemplate[] = [
     id: 'lora-training',
     name: 'LoRA 微调训练',
     description: '使用 LoRA 技术微调 Stable Diffusion 模型',
-    category: 'AI服务',
+    category: '模型训练',
     icon: 'sparkles',
     tags: ['LoRA', '微调', 'Training', 'SD'],
     scripts: [
@@ -105,29 +105,647 @@ const projectTemplates: ProjectTemplate[] = [
   },
   {
     id: 'comfyui-node-manager',
-    name: 'ComfyUI 节点管理器',
+    name: 'Comfy-Flux 图像生成',
     description: '完整的 ComfyUI 部署和管理方案：安装应用、添加模型、管理节点',
-    category: 'ComfyUI',
-    icon: 'box',
-    tags: ['ComfyUI', 'Node管理', 'Volume', 'Flux', '模型管理'],
+    category: '图像生成',
+    icon: 'sparkles',
+    tags: ['ComfyUI', 'Flux', '图像生成', 'Volume', '模型管理'],
     scripts: [
-      { name: 'ComfyUI 主应用', fileName: 'comfyui_app.py', description: '完整服务：环境配置 + 模型下载 + UI/API 服务', content: `# ComfyUI 主应用脚本` },
-      { name: '添加模型', fileName: 'add_models.py', description: '从 HuggingFace/URL 添加模型到已部署的应用', content: `# 模型管理脚本` },
-      { name: '添加 Custom Nodes', fileName: 'add_custom_nodes.py', description: '安装、更新、卸载自定义节点', content: `# 节点管理脚本` }
+      { 
+        name: 'ComfyUI 主应用', 
+        fileName: 'comfyui_app.py', 
+        description: '完整服务：环境配置 + 模型下载 + UI/API 服务', 
+        content: `"""
+=============================================================================
+ComfyUI 完整应用服务
+=============================================================================
+⚠️ 首次使用请先配置项目变量（点击项目标题旁的齿轮图标）:
+  - VOLUME_NAME: 模型存储 Volume 名称
+  - APP_NAME: Modal 应用名称（所有脚本共用）
+  - GPU_TYPE: GPU 类型
+
+部署命令: modal deploy comfyui_app.py
+=============================================================================
+"""
+# 完整的主应用脚本内容请参考 data/projects/comfyui-node-manager/comfyui_app.py
+# 这里提供简化版本用于快速入门
+
+import modal
+import subprocess
+from pathlib import Path
+
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:comfyui-cache}}"
+APP_NAME = "{{APP_NAME:Modal 应用名称:comfyui-app}}"
+GPU_TYPE = "{{GPU_TYPE:GPU 类型:L40S}}"
+
+# 构建镜像
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git", "wget", "curl")
+    .pip_install("fastapi[standard]==0.115.4", "comfy-cli==1.5.1")
+    .run_commands("comfy --skip-prompt install --fast-deps --nvidia")
+)
+
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+app = modal.App(name=APP_NAME, image=image)
+
+@app.function(
+    max_containers=1,
+    gpu=GPU_TYPE,
+    volumes={"/cache": vol},
+    timeout=86400
+)
+@modal.web_server(8000, startup_timeout=60)
+def ui():
+    """ComfyUI Web 界面"""
+    subprocess.Popen("comfy launch -- --listen 0.0.0.0 --port 8000", shell=True)
+` 
+      },
+      { 
+        name: '添加模型 (HuggingFace)', 
+        fileName: 'add_model_hf.py', 
+        description: '从 HuggingFace 下载模型到共享 Volume', 
+        content: `"""
+=============================================================================
+ComfyUI 添加模型 (HuggingFace)
+=============================================================================
+从 HuggingFace 下载模型到共享 Volume
+
+使用方法:
+    modal run add_model_hf.py
+=============================================================================
+"""
+import modal
+import os
+from pathlib import Path
+
+# =============================================================================
+# 项目变量 - 与主服务共享同一个 Volume
+# =============================================================================
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:comfyui-cache}}"
+APP_NAME = "{{APP_NAME:Modal 应用名称:comfyui-app}}"
+
+# 脚本变量 - 每次执行时填写
+HF_REPO_ID = "{{HF_REPO_ID:HuggingFace 仓库 ID:Comfy-Org/flux1-dev}}"
+HF_FILENAME = "{{HF_FILENAME:文件名:flux1-dev-fp8.safetensors}}"
+MODEL_TYPE = "{{MODEL_TYPE:模型类型:checkpoints}}"
+
+# =============================================================================
+# 使用与主服务相同的 Volume
+# =============================================================================
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+
+MODEL_TYPES = ["checkpoints", "loras", "vae", "clip", "text_encoders",
+               "diffusion_models", "controlnet", "upscale_models", "embeddings"]
+
+try:
+    hf_secret = modal.Secret.from_name("huggingface-secret")
+except modal.exception.NotFoundError:
+    hf_secret = None
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("huggingface_hub[hf_transfer]", "requests")
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+)
+
+app = modal.App(f"{APP_NAME}-hf-downloader", image=image)
+
+
+@app.function(
+    volumes={"/cache": vol},
+    timeout=3600,
+    secrets=[hf_secret] if hf_secret else []
+)
+def download_model():
+    """从 HuggingFace 下载模型"""
+    from huggingface_hub import hf_hub_download
+    
+    repo_id = HF_REPO_ID
+    filename = HF_FILENAME
+    model_type = MODEL_TYPE
+    
+    print(f"{'='*60}")
+    print(f"📥 从 HuggingFace 下载模型")
+    print(f"{'='*60}")
+    print(f"仓库: {repo_id}")
+    print(f"文件: {filename}")
+    print(f"类型: {model_type}")
+    print(f"Volume: {VOLUME_NAME}")
+    
+    if model_type not in MODEL_TYPES:
+        return {"success": False, "error": f"不支持的类型: {model_type}"}
+    
+    # 只取文件名，忽略 HuggingFace 仓库中的子目录路径
+    local_name = Path(filename).name
+    
+    target_dir = Path(f"/cache/models/{model_type}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_file = target_dir / local_name
+    
+    if target_file.exists() or target_file.is_symlink():
+        print(f"\\n⚠️ 模型已存在: {local_name}")
+        return {"success": True, "action": "exists"}
+    
+    try:
+        print(f"\\n⏳ 下载中...")
+        hf_token = os.getenv("HF_TOKEN")
+        
+        cached_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            cache_dir="/cache/hf_cache",
+            token=hf_token
+        )
+        
+        # 创建符号链接
+        os.symlink(cached_path, str(target_file))
+        vol.commit()
+        
+        size_mb = Path(cached_path).stat().st_size / (1024*1024)
+        print(f"\\n✅ 下载成功!")
+        print(f"   文件: {model_type}/{local_name}")
+        print(f"   大小: {size_mb:.1f} MB")
+        
+        return {"success": True, "action": "downloaded", "size_mb": size_mb, "local_name": local_name}
+        
+    except Exception as e:
+        print(f"\\n❌ 下载失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.local_entrypoint()
+def main():
+    print(f"\\n{'='*60}")
+    print(f"ComfyUI 添加模型 ({APP_NAME})")
+    print(f"{'='*60}")
+    
+    result = download_model.remote()
+    
+    if result.get("success"):
+        if result.get("action") == "downloaded":
+            print(f"\\n✅ 模型下载完成: {result.get('local_name')}")
+            print(f"\\n📌 下一步: 重启 ComfyUI 服务使模型生效")
+            print(f"   运行: modal app stop {APP_NAME}")
+        else:
+            print(f"\\n✅ 模型已存在，无需下载")
+    else:
+        print(f"\\n❌ 失败: {result.get('error')}")
+` 
+      },
+      { 
+        name: '添加模型 (URL)', 
+        fileName: 'add_model_url.py', 
+        description: '从 URL 直接下载模型到共享 Volume', 
+        content: `"""
+=============================================================================
+ComfyUI 添加模型 (URL)
+=============================================================================
+从 URL 直接下载模型到共享 Volume
+
+使用方法:
+    modal run add_model_url.py
+=============================================================================
+"""
+import modal
+from pathlib import Path
+
+# =============================================================================
+# 项目变量 - 与主服务共享同一个 Volume
+# =============================================================================
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:comfyui-cache}}"
+APP_NAME = "{{APP_NAME:Modal 应用名称:comfyui-app}}"
+
+# 脚本变量 - 每次执行时填写
+MODEL_URL = "{{MODEL_URL:模型下载 URL:}}"
+MODEL_FILENAME = "{{MODEL_FILENAME:保存的文件名:model.safetensors}}"
+MODEL_TYPE = "{{MODEL_TYPE:模型类型:loras}}"
+
+# =============================================================================
+# 使用与主服务相同的 Volume
+# =============================================================================
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+
+MODEL_TYPES = ["checkpoints", "loras", "vae", "clip", "text_encoders",
+               "diffusion_models", "controlnet", "upscale_models", "embeddings"]
+
+image = modal.Image.debian_slim(python_version="3.11").pip_install("requests", "tqdm")
+
+app = modal.App(f"{APP_NAME}-url-downloader", image=image)
+
+
+@app.function(volumes={"/cache": vol}, timeout=3600)
+def download_model():
+    """从 URL 下载模型"""
+    import requests
+    from tqdm import tqdm
+    
+    url = MODEL_URL
+    filename = MODEL_FILENAME
+    model_type = MODEL_TYPE
+    
+    print(f"{'='*60}")
+    print(f"📥 从 URL 下载模型")
+    print(f"{'='*60}")
+    print(f"URL: {url}")
+    print(f"文件: {filename}")
+    print(f"类型: {model_type}")
+    print(f"Volume: {VOLUME_NAME}")
+    
+    if not url:
+        return {"success": False, "error": "未提供下载 URL"}
+    
+    if model_type not in MODEL_TYPES:
+        return {"success": False, "error": f"不支持的类型: {model_type}"}
+    
+    target_dir = Path(f"/cache/models/{model_type}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_file = target_dir / filename
+    
+    if target_file.exists():
+        print(f"\\n⚠️ 模型已存在: {filename}")
+        return {"success": True, "action": "exists"}
+    
+    try:
+        print(f"\\n⏳ 下载中...")
+        
+        response = requests.get(url, stream=True, timeout=60)
+        response.raise_for_status()
+        
+        total_size = int(response.headers.get('content-length', 0))
+        
+        with open(target_file, 'wb') as f:
+            with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
+                for chunk in response.iter_content(chunk_size=8192*1024):
+                    if chunk:
+                        f.write(chunk)
+                        pbar.update(len(chunk))
+        
+        vol.commit()
+        
+        size_mb = target_file.stat().st_size / (1024*1024)
+        print(f"\\n✅ 下载成功!")
+        print(f"   文件: {model_type}/{filename}")
+        print(f"   大小: {size_mb:.1f} MB")
+        
+        return {"success": True, "action": "downloaded", "size_mb": size_mb, "filename": filename}
+        
+    except Exception as e:
+        if target_file.exists():
+            target_file.unlink()
+        print(f"\\n❌ 下载失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.local_entrypoint()
+def main():
+    print(f"\\n{'='*60}")
+    print(f"ComfyUI 添加模型 ({APP_NAME})")
+    print(f"{'='*60}")
+    
+    result = download_model.remote()
+    
+    if result.get("success"):
+        if result.get("action") == "downloaded":
+            print(f"\\n✅ 模型下载完成: {result.get('filename')}")
+            print(f"\\n📌 下一步: 重启 ComfyUI 服务使模型生效")
+            print(f"   运行: modal app stop {APP_NAME}")
+        else:
+            print(f"\\n✅ 模型已存在，无需下载")
+    else:
+        print(f"\\n❌ 失败: {result.get('error')}")
+` 
+      },
+      { 
+        name: '添加自定义节点', 
+        fileName: 'add_node.py', 
+        description: '从 Git 仓库安装自定义节点到 ComfyUI', 
+        content: `"""
+=============================================================================
+ComfyUI 添加自定义节点
+=============================================================================
+从 Git 仓库安装自定义节点到 ComfyUI
+
+使用方法:
+    modal run add_node.py
+=============================================================================
+"""
+import modal
+import subprocess
+import json
+from pathlib import Path
+from datetime import datetime
+
+# =============================================================================
+# 项目变量 - 与主服务共享同一个 Volume
+# =============================================================================
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:comfyui-cache}}"
+APP_NAME = "{{APP_NAME:Modal 应用名称:comfyui-app}}"
+
+# 脚本变量 - 每次执行时填写
+NODE_REPO_URL = "{{NODE_REPO_URL:节点 Git 仓库 URL:https://github.com/ltdrdata/ComfyUI-Manager.git}}"
+NODE_BRANCH = "{{NODE_BRANCH:分支:main}}"
+
+# =============================================================================
+# 使用与主服务相同的 Volume
+# =============================================================================
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
+    .pip_install("requests")
+)
+
+app = modal.App(f"{APP_NAME}-node-installer", image=image)
+
+
+@app.function(
+    volumes={"/cache": vol},
+    timeout=600
+)
+def install_node():
+    """安装自定义节点到共享 Volume"""
+    repo_url = NODE_REPO_URL
+    branch = NODE_BRANCH
+    
+    node_name = repo_url.split("/")[-1].replace(".git", "")
+    node_path = f"/cache/custom_nodes/{node_name}"
+    
+    print(f"{'='*60}")
+    print(f"📦 安装 Custom Node: {node_name}")
+    print(f"{'='*60}")
+    print(f"仓库: {repo_url}")
+    print(f"分支: {branch}")
+    print(f"Volume: {VOLUME_NAME}")
+    
+    # 确保目录存在
+    Path("/cache/custom_nodes").mkdir(parents=True, exist_ok=True)
+    
+    # 检查是否已存在
+    if Path(node_path).exists():
+        print(f"\\n⚠️ 节点已存在: {node_name}")
+        print("正在更新节点...")
+        try:
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd=node_path,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            if result.returncode == 0:
+                vol.commit()
+                print(f"✅ 节点更新成功")
+                return {
+                    "success": True,
+                    "action": "updated",
+                    "node_name": node_name,
+                    "message": "节点已更新，请重启 ComfyUI 服务"
+                }
+            else:
+                print(f"⚠️ 更新失败: {result.stderr}")
+        except Exception as e:
+            print(f"❌ 更新出错: {e}")
+    
+    try:
+        # 步骤 1: 克隆仓库
+        print("\\n[1/3] 克隆仓库...")
+        clone_cmd = ["git", "clone", "-b", branch, "--depth", "1", repo_url, node_path]
+        result = subprocess.run(clone_cmd, capture_output=True, text=True, timeout=180)
+        
+        if result.returncode != 0:
+            raise Exception(f"克隆失败: {result.stderr}")
+        print("✓ 克隆成功")
+        
+        # 步骤 2: 检查依赖文件
+        requirements_file = f"{node_path}/requirements.txt"
+        has_req = Path(requirements_file).exists()
+        
+        if has_req:
+            print("\\n[2/3] 检测到依赖文件...")
+            print("   ℹ️ 依赖将在 ComfyUI 启动时自动安装")
+            with open(requirements_file, 'r') as f:
+                deps = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                if deps:
+                    print(f"   📦 依赖项: {', '.join(deps[:5])}" + ("..." if len(deps) > 5 else ""))
+        else:
+            print("\\n[2/3] 无依赖文件")
+        
+        # 步骤 3: 记录安装信息
+        print("\\n[3/3] 记录安装信息...")
+        install_info = {
+            "node_name": node_name,
+            "repo_url": repo_url,
+            "branch": branch,
+            "installed_at": datetime.now().isoformat(),
+            "has_requirements": has_req
+        }
+        
+        info_file = f"{node_path}/.install_info.json"
+        with open(info_file, 'w') as f:
+            json.dump(install_info, f, indent=2)
+        
+        vol.commit()
+        print("✓ 已保存到 Volume")
+        
+        print(f"\\n{'='*60}")
+        print(f"✅ Custom Node {node_name} 安装成功!")
+        print(f"{'='*60}")
+        
+        return {
+            "success": True,
+            "action": "installed",
+            "node_name": node_name,
+            "message": "节点安装成功，请重启 ComfyUI 服务"
+        }
+        
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "操作超时", "node_name": node_name}
+    except Exception as e:
+        # 清理失败的安装
+        if Path(node_path).exists():
+            import shutil
+            shutil.rmtree(node_path)
+        return {"success": False, "error": str(e), "node_name": node_name}
+
+
+@app.local_entrypoint()
+def main():
+    print(f"\\n{'='*60}")
+    print(f"ComfyUI 添加自定义节点 ({APP_NAME})")
+    print(f"{'='*60}")
+    
+    result = install_node.remote()
+    
+    if result.get("success"):
+        print(f"\\n✅ 操作完成")
+        print(f"\\n📌 下一步: 重启 ComfyUI 服务使节点生效")
+        print(f"   运行: modal app stop {APP_NAME}")
+        print(f"   然后访问 ComfyUI URL，服务会自动重启并加载节点")
+    else:
+        print(f"\\n❌ 失败: {result.get('error')}")
+` 
+      },
+      { 
+        name: '诊断工具', 
+        fileName: 'diagnose.py', 
+        description: '检查共享 Volume 中的模型和节点状态', 
+        content: `"""
+=============================================================================
+ComfyUI 诊断工具
+=============================================================================
+检查 Volume 中存储的模型和节点状态
+
+使用方法:
+    modal run diagnose.py
+=============================================================================
+"""
+import modal
+import os
+import json
+from pathlib import Path
+
+# 配置参数
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:comfyui-cache}}"
+
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+
+image = modal.Image.debian_slim(python_version="3.11")
+
+app = modal.App("comfyui-diagnose", image=image)
+
+# 模型类型映射
+MODEL_TYPES = ["checkpoints", "loras", "vae", "clip", "controlnet", "upscale_models", "embeddings"]
+
+
+@app.function(volumes={"/cache": vol})
+def diagnose():
+    """诊断 Volume 内容"""
+    print("=" * 60)
+    print("🔍 ComfyUI Volume 诊断报告")
+    print("=" * 60)
+    
+    result = {"models": {}, "custom_nodes": [], "summary": {}}
+    
+    # 1. 检查模型
+    print("\\n📦 模型检查:")
+    cache_models = Path("/cache/models")
+    total_models = 0
+    
+    if cache_models.exists():
+        for model_type in MODEL_TYPES:
+            model_dir = cache_models / model_type
+            if model_dir.exists():
+                files = list(model_dir.iterdir())
+                if files:
+                    result["models"][model_type] = []
+                    print(f"\\n   📁 {model_type} ({len(files)} 个):")
+                    for f in files:
+                        size_mb = f.stat().st_size / (1024 * 1024) if f.exists() else 0
+                        is_link = f.is_symlink()
+                        result["models"][model_type].append({
+                            "name": f.name,
+                            "size_mb": round(size_mb, 2),
+                            "is_link": is_link
+                        })
+                        link_mark = " 🔗" if is_link else ""
+                        print(f"      • {f.name} ({size_mb:.1f} MB){link_mark}")
+                        total_models += 1
+    else:
+        print("   ℹ️ 无持久化模型目录")
+    
+    # 2. 检查节点
+    print("\\n" + "=" * 60)
+    print("🧩 节点检查:")
+    cache_nodes = Path("/cache/custom_nodes")
+    
+    if cache_nodes.exists():
+        nodes = list(cache_nodes.iterdir())
+        valid_nodes = 0
+        
+        for node_dir in nodes:
+            if node_dir.is_dir():
+                has_req = (node_dir / "requirements.txt").exists()
+                has_init = (node_dir / "__init__.py").exists()
+                
+                # 尝试读取安装信息
+                info_file = node_dir / ".install_info.json"
+                install_info = {}
+                if info_file.exists():
+                    try:
+                        install_info = json.loads(info_file.read_text())
+                    except:
+                        pass
+                
+                info = {
+                    "name": node_dir.name,
+                    "has_requirements": has_req,
+                    "has_init": has_init,
+                    "valid": has_init,
+                    "repo_url": install_info.get("repo_url", ""),
+                    "installed_at": install_info.get("installed_at", "")
+                }
+                result["custom_nodes"].append(info)
+                
+                status = "✅" if has_init else "⚠️"
+                if has_init:
+                    valid_nodes += 1
+                
+                print(f"\\n   {status} {node_dir.name}")
+                if info["repo_url"]:
+                    print(f"      仓库: {info['repo_url']}")
+                print(f"      requirements.txt: {'有' if has_req else '无'}")
+                print(f"      __init__.py: {'有' if has_init else '无'}")
+        
+        print(f"\\n   📊 节点统计: {valid_nodes}/{len(nodes)} 个有效")
+    else:
+        print("   ℹ️ 无持久化节点目录")
+    
+    # 3. 汇总
+    result["summary"] = {
+        "total_models": total_models,
+        "total_nodes": len(result["custom_nodes"]),
+        "valid_nodes": sum(1 for n in result["custom_nodes"] if n["valid"])
+    }
+    
+    print("\\n" + "=" * 60)
+    print("📊 汇总")
+    print("=" * 60)
+    print(f"   模型: {result['summary']['total_models']} 个")
+    print(f"   节点: {result['summary']['valid_nodes']}/{result['summary']['total_nodes']} 个有效")
+    
+    if result["summary"]["total_nodes"] > 0 or result["summary"]["total_models"] > 0:
+        print("\\n📌 提示:")
+        print("   如果添加了新资源，需要重启 ComfyUI 服务才能生效")
+        print("   运行: modal app stop comfyui-app")
+    
+    print("=" * 60)
+    
+    return result
+
+
+@app.local_entrypoint()
+def main():
+    print("\\n🔍 开始诊断 ComfyUI Volume...")
+    result = diagnose.remote()
+    print("\\n✅ 诊断完成")
+` 
+      }
     ]
   },
   {
     id: 'z-image-turbo',
-    name: 'Z-Image-Turbo 图像生成',
+    name: 'Comfy-Z-Image-Turbo 图像生成',
     description: '阿里巴巴 Z-Image-Turbo 高效图像生成，6B 参数媲美 20B+ 模型，支持热加载模型',
-    category: 'ComfyUI',
+    category: '图像生成',
     icon: 'sparkles',
     tags: ['Z-Image', 'ComfyUI', '图像生成', '热加载', 'L40S', '真实人像'],
     scripts: [
       { 
-        name: '1. Z-Image 主服务', 
+        name: 'Z-Image 主服务', 
         fileName: 'z_image_app.py', 
-        description: '【首次部署】ComfyUI + 热加载 API，配置项目变量后部署', 
+        description: 'ComfyUI + 热加载 API 完整服务', 
         content: `"""
 =============================================================================
 Z-Image-Turbo ComfyUI 应用服务
@@ -294,9 +912,9 @@ def main():
 ` 
       },
       { 
-        name: '2. 添加模型 (HuggingFace)', 
+        name: '添加模型 (HuggingFace)', 
         fileName: 'add_model_hf.py', 
-        description: '从 HuggingFace 下载模型到共享 Volume', 
+        description: '从 HuggingFace 下载模型到共享 Volume，支持自动热加载', 
         content: `"""
 =============================================================================
 Z-Image-Turbo 添加模型 (HuggingFace)
@@ -369,12 +987,15 @@ def download_model():
     if model_type not in MODEL_TYPES:
         return {"success": False, "error": f"不支持的类型: {model_type}"}
     
+    # 只取文件名，忽略 HuggingFace 仓库中的子目录路径
+    local_name = Path(filename).name
+    
     target_dir = Path(f"/models/{model_type}")
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_file = target_dir / filename
+    target_file = target_dir / local_name
     
     if target_file.exists():
-        print(f"\\n⚠️ 模型已存在: {filename}")
+        print(f"\\n⚠️ 模型已存在: {local_name}")
         return {"success": True, "action": "exists"}
     
     try:
@@ -394,16 +1015,40 @@ def download_model():
         
         size_mb = target_file.stat().st_size / (1024*1024)
         print(f"\\n✅ 下载成功!")
-        print(f"   文件: {model_type}/{filename}")
+        print(f"   文件: {model_type}/{local_name}")
         print(f"   大小: {size_mb:.1f} MB")
-        print(f"\\n💡 下一步: 访问主服务的 /reload API 触发热加载")
-        print(f"   curl -X POST https://[workspace]--{APP_NAME}-zimageapi-reload.modal.run")
         
-        return {"success": True, "action": "downloaded", "size_mb": size_mb}
+        return {"success": True, "action": "downloaded", "size_mb": size_mb, "local_name": local_name}
         
     except Exception as e:
         print(f"\\n❌ 下载失败: {e}")
         return {"success": False, "error": str(e)}
+
+
+def trigger_hot_reload():
+    """触发主服务热加载"""
+    print(f"\\n🔄 触发热加载...")
+    
+    try:
+        # 尝试查找并调用已部署的 ZImageAPI.reload 方法
+        ZImageAPI = modal.Cls.lookup(APP_NAME, "ZImageAPI")
+        result = ZImageAPI().reload.remote()
+        
+        if result.get("success"):
+            print(f"   ✅ 热加载成功!")
+            return True
+        else:
+            print(f"   ⚠️ 热加载响应: {result}")
+            return False
+            
+    except modal.exception.NotFoundError:
+        print(f"   ⚠️ 主服务 ({APP_NAME}) 尚未部署")
+        print(f"   💡 请先部署主服务: modal deploy z_image_app.py")
+        return False
+    except Exception as e:
+        print(f"   ⚠️ 热加载失败: {e}")
+        print(f"   💡 如果主服务未运行，模型将在下次启动时自动加载")
+        return False
 
 
 @app.local_entrypoint()
@@ -411,17 +1056,24 @@ def main():
     print(f"\\n{'='*60}")
     print(f"Z-Image-Turbo 添加模型 ({APP_NAME})")
     print(f"{'='*60}")
+    
     result = download_model.remote()
+    
     if result.get("success"):
-        print(f"\\n✅ 操作完成")
+        if result.get("action") == "downloaded":
+            print(f"\\n✅ 模型下载完成: {result.get('local_name')}")
+            # 自动触发热加载
+            trigger_hot_reload()
+        else:
+            print(f"\\n✅ 模型已存在，无需下载")
     else:
         print(f"\\n❌ 失败: {result.get('error')}")
-` 
+`
       },
       { 
-        name: '3. 添加模型 (URL)', 
+        name: '添加模型 (URL)', 
         fileName: 'add_model_url.py', 
-        description: '从 URL 直接下载模型到共享 Volume', 
+        description: '从 URL 直接下载模型到共享 Volume，支持自动热加载', 
         content: `"""
 =============================================================================
 Z-Image-Turbo 添加模型 (URL)
@@ -512,9 +1164,8 @@ def download_model():
         print(f"\\n✅ 下载成功!")
         print(f"   文件: {model_type}/{filename}")
         print(f"   大小: {size_mb:.1f} MB")
-        print(f"\\n💡 下一步: 访问主服务的 /reload API 触发热加载")
         
-        return {"success": True, "action": "downloaded", "size_mb": size_mb}
+        return {"success": True, "action": "downloaded", "size_mb": size_mb, "filename": filename}
         
     except Exception as e:
         if target_file.exists():
@@ -523,22 +1174,216 @@ def download_model():
         return {"success": False, "error": str(e)}
 
 
+def trigger_hot_reload():
+    """触发主服务热加载"""
+    print(f"\\n🔄 触发热加载...")
+    
+    try:
+        # 尝试查找并调用已部署的 ZImageAPI.reload 方法
+        ZImageAPI = modal.Cls.lookup(APP_NAME, "ZImageAPI")
+        result = ZImageAPI().reload.remote()
+        
+        if result.get("success"):
+            print(f"   ✅ 热加载成功!")
+            return True
+        else:
+            print(f"   ⚠️ 热加载响应: {result}")
+            return False
+            
+    except modal.exception.NotFoundError:
+        print(f"   ⚠️ 主服务 ({APP_NAME}) 尚未部署")
+        print(f"   💡 请先部署主服务: modal deploy z_image_app.py")
+        return False
+    except Exception as e:
+        print(f"   ⚠️ 热加载失败: {e}")
+        print(f"   💡 如果主服务未运行，模型将在下次启动时自动加载")
+        return False
+
+
 @app.local_entrypoint()
 def main():
     print(f"\\n{'='*60}")
     print(f"Z-Image-Turbo 添加模型 ({APP_NAME})")
     print(f"{'='*60}")
+    
     result = download_model.remote()
+    
     if result.get("success"):
-        print(f"\\n✅ 操作完成")
+        if result.get("action") == "downloaded":
+            print(f"\\n✅ 模型下载完成: {result.get('filename')}")
+            # 自动触发热加载
+            trigger_hot_reload()
+        else:
+            print(f"\\n✅ 模型已存在，无需下载")
     else:
         print(f"\\n❌ 失败: {result.get('error')}")
-` 
+`
       },
       { 
-        name: '4. 模型管理', 
+        name: '添加模型 (本地上传)', 
+        fileName: 'add_model_local.py', 
+        description: '从本地上传模型文件到共享 Volume，支持自动热加载', 
+        content: `"""
+=============================================================================
+Z-Image-Turbo 添加模型 (本地上传)
+=============================================================================
+从本地上传模型文件到共享 Volume
+
+使用方法:
+    modal run add_model_local.py --local-path=./model.safetensors --type=loras
+=============================================================================
+"""
+import modal
+from pathlib import Path
+import shutil
+
+# =============================================================================
+# 项目变量 - 与主服务共享同一个 Volume
+# =============================================================================
+VOLUME_NAME = "{{VOLUME_NAME:模型存储 Volume:z-image-models}}"
+APP_NAME = "{{APP_NAME:Modal 应用名称:z-image-turbo}}"
+
+# 脚本变量 - 每次执行时填写
+LOCAL_FILE_PATH = "{{LOCAL_FILE_PATH:本地文件路径:./model.safetensors}}"
+MODEL_TYPE = "{{MODEL_TYPE:模型类型:loras}}"
+
+# =============================================================================
+# 使用与主服务相同的 Volume
+# =============================================================================
+vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
+
+MODEL_TYPES = ["checkpoints", "loras", "vae", "clip", "text_encoders",
+               "diffusion_models", "controlnet", "upscale_models", "embeddings"]
+
+image = modal.Image.debian_slim(python_version="3.11")
+
+app = modal.App(f"{APP_NAME}-local-uploader", image=image)
+
+
+@app.function(volumes={"/models": vol}, timeout=3600)
+def upload_model(local_path: str, model_type: str):
+    """将本地模型上传到 Volume"""
+    
+    print(f"{'='*60}")
+    print(f"📤 上传本地模型到 Volume")
+    print(f"{'='*60}")
+    print(f"本地文件: {local_path}")
+    print(f"类型: {model_type}")
+    print(f"Volume: {VOLUME_NAME}")
+    
+    if model_type not in MODEL_TYPES:
+        return {"success": False, "error": f"不支持的类型: {model_type}"}
+    
+    # 获取文件名
+    filename = Path(local_path).name
+    
+    # 目标路径
+    target_dir = Path(f"/models/{model_type}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_file = target_dir / filename
+    
+    if target_file.exists():
+        print(f"\\n⚠️ 模型已存在: {filename}")
+        return {"success": True, "action": "exists"}
+    
+    try:
+        print(f"\\n⏳ 上传中...")
+        
+        # 从挂载点复制文件到 Volume
+        source_file = Path(local_path)
+        if not source_file.exists():
+            raise Exception(f"本地文件不存在: {local_path}")
+        
+        shutil.copy2(str(source_file), str(target_file))
+        vol.commit()
+        
+        size_mb = target_file.stat().st_size / (1024*1024)
+        print(f"\\n✅ 上传成功!")
+        print(f"   文件: {model_type}/{filename}")
+        print(f"   大小: {size_mb:.1f} MB")
+        
+        return {"success": True, "action": "uploaded", "size_mb": size_mb, "filename": filename}
+        
+    except Exception as e:
+        # 清理失败的上传
+        if target_file.exists():
+            target_file.unlink()
+        print(f"\\n❌ 上传失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def trigger_hot_reload():
+    """触发主服务热加载"""
+    print(f"\\n🔄 触发热加载...")
+    
+    try:
+        # 尝试查找并调用已部署的 ZImageAPI.reload 方法
+        ZImageAPI = modal.Cls.lookup(APP_NAME, "ZImageAPI")
+        result = ZImageAPI().reload.remote()
+        
+        if result.get("success"):
+            print(f"   ✅ 热加载成功!")
+            return True
+        else:
+            print(f"   ⚠️ 热加载响应: {result}")
+            return False
+            
+    except modal.exception.NotFoundError:
+        print(f"   ⚠️ 主服务 ({APP_NAME}) 尚未部署")
+        print(f"   💡 请先部署主服务: modal deploy z_image_app.py")
+        return False
+    except Exception as e:
+        print(f"   ⚠️ 热加载失败: {e}")
+        print(f"   💡 如果主服务未运行，模型将在下次启动时自动加载")
+        return False
+
+
+@app.local_entrypoint()
+def main(local_path: str = LOCAL_FILE_PATH, type: str = MODEL_TYPE):
+    """
+    本地入口
+    
+    使用方法:
+        modal run add_model_local.py --local-path=./model.safetensors --type=loras
+    """
+    print(f"\\n{'='*60}")
+    print(f"Z-Image-Turbo 上传本地模型 ({APP_NAME})")
+    print(f"{'='*60}")
+    
+    # 验证本地文件存在
+    if not Path(local_path).exists():
+        print(f"\\n❌ 错误: 本地文件不存在: {local_path}")
+        return
+    
+    # 创建文件挂载
+    print(f"准备挂载本地文件...")
+    local_file = Path(local_path).resolve()
+    
+    # 使用 Mount 将本地文件挂载到容器
+    mount = modal.Mount.from_local_file(
+        local_path=str(local_file),
+        remote_path=f"/tmp/{local_file.name}"
+    )
+    
+    # 运行上传函数，传入挂载后的路径
+    with mount:
+        result = upload_model.remote(f"/tmp/{local_file.name}", type)
+    
+    if result.get("success"):
+        if result.get("action") == "uploaded":
+            print(f"\\n✅ 模型上传完成: {result.get('filename')}")
+            # 自动触发热加载
+            trigger_hot_reload()
+        else:
+            print(f"\\n✅ 模型已存在，无需上传")
+    else:
+        print(f"\\n❌ 失败: {result.get('error')}")
+`
+      },
+      { 
+        name: '模型管理', 
         fileName: 'manage_models.py', 
-        description: '列出/删除共享 Volume 中的模型', 
+        description: '列出共享 Volume 中的所有模型', 
         content: `"""
 =============================================================================
 Z-Image-Turbo 模型管理
@@ -613,10 +1458,10 @@ def main():
     print(f"Z-Image-Turbo 模型管理 ({APP_NAME})")
     print(f"{'='*60}")
     list_models.remote()
-` 
+`
       },
       { 
-        name: '5. 诊断工具', 
+        name: '诊断工具', 
         fileName: 'diagnose.py', 
         description: '检查共享 Volume 和服务状态', 
         content: `"""
@@ -700,7 +1545,7 @@ def diagnose():
 def main():
     print("\\n🔍 开始诊断 Z-Image-Turbo...")
     diagnose.remote()
-` 
+`
       }
     ]
   },
@@ -825,18 +1670,6 @@ def main():
       { name: '12 - 短链接追踪服务', fileName: '12_url_shortener.py', description: '解决：营销链接太长且无法追踪点击效果', content: `# 短链接脚本` },
       { name: '13 - PDF 批量处理', fileName: '13_pdf_processor.py', description: '解决：HR/财务需要批量合并、拆分、加水印 PDF', content: `# PDF处理脚本` },
       { name: '14 - 多渠道通知服务', fileName: '14_notification_service.py', description: '解决：活动期间需要快速发送大量用户通知', content: `# 通知服务脚本` }
-    ]
-  },
-  {
-    id: 'z-image-turbo',
-    name: 'Z-Image-Turbo 图像生成',
-    description: '阿里巴巴 Z-Image-Turbo 高效图像生成，6B 参数媲美 20B+ 模型，擅长照片级真实人像，2.3 秒生成 1024×1024',
-    category: 'AI服务',
-    icon: 'sparkles',
-    tags: ['Z-Image', '阿里巴巴', '人像生成', '高效', 'ComfyUI', 'GPU'],
-    scripts: [
-      { name: '1. 部署 Z-Image 服务', fileName: 'z_image_app.py', description: '部署完整 Z-Image-Turbo 服务（首次使用先运行）', content: `# Z-Image 部署脚本` },
-      { name: '2. 下载模型', fileName: 'download_models.py', description: '下载文本编码器、扩散模型、VAE', content: `# 模型下载脚本` }
     ]
   }
 ];

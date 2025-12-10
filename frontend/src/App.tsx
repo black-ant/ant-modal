@@ -11,6 +11,7 @@ import ComfyUIToolbox from './pages/ComfyUIToolbox';
 import AuthorInfo from './pages/AuthorInfo';
 import GlobalVariables from './pages/GlobalVariables';
 import ExecutionLogs from './pages/ExecutionLogs';
+import ModalTutorial from './pages/ModalTutorial';
 
 function App() {
   return (
@@ -18,6 +19,9 @@ function App() {
       <Routes>
         {/* 脚本编辑器页面不使用 Layout（全屏） */}
         <Route path="/script-editor/:projectId/:scriptPath" element={<ScriptEditorPage />} />
+        
+        {/* 教程页面不使用 Layout（全屏） */}
+        <Route path="/tutorial" element={<ModalTutorial />} />
         
         {/* 其他页面使用 Layout */}
         <Route path="*" element={

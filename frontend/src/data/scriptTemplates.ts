@@ -76,13 +76,13 @@ export function replaceTemplateVariables(
 
 export const scriptTemplates: ScriptTemplate[] = [
   // --------------------------------------------------------------------------
-  // ComfyUI 相关
+  // 图像生成相关
   // --------------------------------------------------------------------------
   {
     id: 'comfyui-add-node',
     name: 'ComfyUI 添加节点',
     description: '安装自定义节点到已部署的 ComfyUI，通过 git clone 方式添加到 custom_nodes 目录',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', 'Custom Node', 'Git', '节点安装'],
     variables: [
       { name: 'GIT_REPO_URL', label: '节点 Git 仓库地址', defaultValue: 'https://github.com/ltdrdata/ComfyUI-Manager.git', required: true, scope: 'script' },
@@ -269,7 +269,7 @@ def main():
     id: 'comfyui-add-model-hf',
     name: 'ComfyUI 添加模型 (HuggingFace)',
     description: '从 HuggingFace 下载模型到已部署的 ComfyUI',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', 'HuggingFace', '模型下载', 'LoRA', 'Checkpoint'],
     variables: [
       { name: 'HF_REPO_ID', label: 'HuggingFace 仓库 ID', defaultValue: 'Comfy-Org/flux1-dev', required: true, scope: 'script' },
@@ -425,7 +425,7 @@ def main():
     id: 'comfyui-add-model-url',
     name: 'ComfyUI 添加模型 (URL)',
     description: '从 URL 直接下载模型到已部署的 ComfyUI',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', 'URL', '模型下载', 'LoRA', 'Civitai'],
     variables: [
       { name: 'MODEL_URL', label: '模型下载 URL', defaultValue: '', required: true, scope: 'script' },
@@ -578,7 +578,7 @@ def main():
     id: 'comfyui-add-model-local',
     name: 'ComfyUI 上传本地模型',
     description: '将本地模型文件上传到 ComfyUI Volume',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', '本地上传', '模型', 'Volume'],
     variables: [
       { name: 'LOCAL_MODEL_PATH', label: '选择本地模型文件', defaultValue: '', required: true, scope: 'script', inputType: 'file' },
@@ -661,7 +661,7 @@ print("=" * 60)
     id: 'comfyui-diagnose',
     name: 'ComfyUI 诊断工具',
     description: '检查 ComfyUI Volume 中的模型和节点状态',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', '诊断', 'Volume', '调试'],
     variables: [
       { name: 'VOLUME_NAME', label: 'Volume 名称', defaultValue: 'comfyui-cache', required: false, scope: 'project' },
@@ -760,7 +760,7 @@ def main():
     id: 'comfyui-stop-app',
     name: 'ComfyUI 重启服务',
     description: '停止 ComfyUI 主服务，下次访问时自动重启并加载新节点',
-    category: 'ComfyUI',
+    category: '图像生成',
     tags: ['ComfyUI', '重启', '节点', '服务'],
     variables: [
       { name: 'APP_NAME', label: 'Modal App 名称', defaultValue: 'comfyui-app', required: false, scope: 'project' },
@@ -827,7 +827,7 @@ def main():
     id: 'z-image-main-service',
     name: 'Z-Image 主服务',
     description: 'Z-Image-Turbo ComfyUI 应用服务',
-    category: 'Z-Image',
+    category: '图像生成',
     tags: ['Z-Image', 'ComfyUI', '部署'],
     variables: [
       { name: 'VOLUME_NAME', label: '模型存储 Volume', defaultValue: 'z-image-models', required: false, scope: 'project' },
@@ -842,7 +842,7 @@ def main():
     id: 'z-image-manage-models',
     name: 'Z-Image 模型管理',
     description: '管理 Z-Image-Turbo 共享 Volume 中的模型',
-    category: 'Z-Image',
+    category: '图像生成',
     tags: ['Z-Image', '模型管理'],
     variables: [
       { name: 'VOLUME_NAME', label: '模型存储 Volume', defaultValue: 'z-image-models', required: false, scope: 'project' },
@@ -855,7 +855,7 @@ def main():
     id: 'z-image-add-model-hf',
     name: 'Z-Image 添加模型 (HuggingFace)',
     description: '从 HuggingFace 下载模型到 Z-Image-Turbo 共享 Volume',
-    category: 'Z-Image',
+    category: '图像生成',
     tags: ['Z-Image', 'HuggingFace', '模型下载', '热加载'],
     variables: [
       { name: 'VOLUME_NAME', label: '模型存储 Volume', defaultValue: 'z-image-models', required: false, scope: 'project' },
@@ -974,7 +974,7 @@ def main():
     id: 'z-image-add-model-url',
     name: 'Z-Image 添加模型 (URL)',
     description: '从 URL 直接下载模型到 Z-Image-Turbo 共享 Volume',
-    category: 'Z-Image',
+    category: '图像生成',
     tags: ['Z-Image', 'URL', '模型下载'],
     variables: [
       { name: 'VOLUME_NAME', label: '模型存储 Volume', defaultValue: 'z-image-models', required: false, scope: 'project' },
@@ -1084,7 +1084,7 @@ def main():
     id: 'z-image-diagnose',
     name: 'Z-Image 诊断工具',
     description: '检查 Z-Image-Turbo 共享 Volume 和服务状态',
-    category: 'Z-Image',
+    category: '图像生成',
     tags: ['Z-Image', '诊断', 'Volume'],
     variables: [
       { name: 'VOLUME_NAME', label: '模型存储 Volume', defaultValue: 'z-image-models', required: false, scope: 'project' },
