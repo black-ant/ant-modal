@@ -33,7 +33,7 @@ type App struct {
 type ModalApp struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
-	AppName     string    `json:"appName"`     // Modal平台上的应用名称
+	AppName     string    `json:"appName"` // Modal平台上的应用名称
 	Description string    `json:"description"`
 	Token       string    `json:"token"`       // Modal Token (兼容旧格式: token_id:token_secret)
 	TokenID     string    `json:"tokenId"`     // Modal Token ID
@@ -103,7 +103,7 @@ func (a *App) getExecutableDir() string {
 			return cwd
 		}
 	}
-	
+
 	// 生产模式：使用可执行文件所在目录
 	exePath, err := os.Executable()
 	if err != nil {
@@ -113,7 +113,7 @@ func (a *App) getExecutableDir() string {
 		}
 		return "."
 	}
-	
+
 	return filepath.Dir(exePath)
 }
 
@@ -150,7 +150,7 @@ func (a *App) startup(ctx context.Context) {
 	// 设置项目目录 - 使用项目根目录下的 data 目录
 	rootDir := a.getExecutableDir()
 	a.projectsDir = filepath.Join(rootDir, "data")
-	
+
 	// 创建数据目录
 	if err := os.MkdirAll(a.projectsDir, 0755); err != nil {
 		fmt.Printf("创建数据目录失败: %v\n", err)
@@ -165,9 +165,9 @@ func (a *App) startup(ctx context.Context) {
 		a.logFile = file
 		a.logger = log.New(file, "", log.LstdFlags)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("应用启动，数据目录: %s", a.projectsDir))
-	
+
 	// 执行数据迁移：将旧的绝对路径转换为相对路径
 	a.migrateAbsolutePathsToRelative()
 }
@@ -178,13 +178,13 @@ func (a *App) migrateAbsolutePathsToRelative() {
 	if len(projects) == 0 {
 		return
 	}
-	
+
 	needsSave := false
 	projectsBase := filepath.Join(a.projectsDir, "projects")
-	
+
 	for i := range projects {
 		project := &projects[i]
-		
+
 		// 检查项目路径是否是绝对路径
 		if filepath.IsAbs(project.Path) {
 			// 尝试转换为相对路径
@@ -201,7 +201,7 @@ func (a *App) migrateAbsolutePathsToRelative() {
 				needsSave = true
 			}
 		}
-		
+
 		// 清空脚本的 FullPath（运行时动态计算）
 		for j := range project.Scripts {
 			if project.Scripts[j].FullPath != "" {
@@ -210,7 +210,7 @@ func (a *App) migrateAbsolutePathsToRelative() {
 			}
 		}
 	}
-	
+
 	// 如果有修改，保存项目配置
 	if needsSave {
 		if err := a.SaveProjects(projects); err != nil {
@@ -248,14 +248,14 @@ type LogEntry struct {
 // Log 记录日志并发送到前端
 func (a *App) Log(lType LogType, message string) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	
+
 	// 写入文件
 	if a.logger != nil {
 		prefix := fmt.Sprintf("[%s] [%s] ", timestamp, lType)
 		a.logger.SetPrefix(prefix)
 		a.logger.Println(message)
 	}
-	
+
 	// 打印到控制台 (开发调试用)
 	fmt.Printf("[%s] %s: %s\n", timestamp, lType, message)
 
@@ -300,7 +300,7 @@ func (a *App) getModalPath() string {
 		filepath.Join(homeDir, "AppData", "Roaming", "Python", "Python311", "Scripts", "modal.exe"),
 		filepath.Join(homeDir, "AppData", "Roaming", "Python", "Python310", "Scripts", "modal.exe"),
 		filepath.Join(homeDir, ".local", "bin", "modal"), // Linux/Mac
-		"/usr/local/bin/modal",                           // Mac
+		"/usr/local/bin/modal", // Mac
 	}
 
 	for _, p := range possiblePaths {
@@ -315,16 +315,36 @@ func (a *App) getModalPath() string {
 
 // GetProjects 获取所有项目
 func (a *App) GetProjects() []Project {
+	fmt.Println("DEBUG: GetProjects called")
 	projects := []Project{}
 	configPath := filepath.Join(a.projectsDir, "projects.json")
+	fmt.Printf("DEBUG: Reading projects from %s\n", configPath)
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
+		fmt.Printf("DEBUG: Failed to read file: %v\n", err)
 		return projects
 	}
 
-	json.Unmarshal(data, &projects)
+	fmt.Printf("DEBUG: File content size: %d bytes\n", len(data))
+	if len(data) > 0 {
+		fmt.Printf("DEBUG: File content start: %s\n", string(data[:min(100, len(data))]))
+	}
+
+	if err := json.Unmarshal(data, &projects); err != nil {
+		fmt.Printf("DEBUG: JSON Unmarshal error: %v\n", err)
+		return projects
+	}
+
+	fmt.Printf("DEBUG: Successfully loaded %d projects\n", len(projects))
 	return projects
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // SaveProjects 保存项目列表
@@ -340,11 +360,11 @@ func (a *App) SaveProjects(projects []Project) error {
 // CreateProject 创建新项目
 func (a *App) CreateProject(name, path, description, appId string) (*Project, error) {
 	a.LogInfo(fmt.Sprintf("[CreateProject] 开始创建项目: name=%s, path=%s, appId=%s", name, path, appId))
-	
+
 	projects := a.GetProjects()
 
 	projectID := fmt.Sprintf("%d", time.Now().UnixNano())
-	
+
 	// 存储相对路径，运行时动态计算绝对路径
 	var relativePath string
 	if path == "" {
@@ -387,7 +407,7 @@ func (a *App) CreateProject(name, path, description, appId string) (*Project, er
 // DeleteProject 删除项目
 func (a *App) DeleteProject(id string) error {
 	a.LogInfo(fmt.Sprintf("[DeleteProject] 开始删除项目: id=%s", id))
-	
+
 	projects := a.GetProjects()
 	newProjects := []Project{}
 	var deletedProject *Project
@@ -418,7 +438,7 @@ func (a *App) DeleteProject(id string) error {
 // UpdateProject 更新项目信息
 func (a *App) UpdateProject(id, name, description, appId string) error {
 	a.LogInfo(fmt.Sprintf("[UpdateProject] 开始更新项目: id=%s, name=%s, appId=%s", id, name, appId))
-	
+
 	projects := a.GetProjects()
 	found := false
 
@@ -527,28 +547,28 @@ func (a *App) SetGlobalVariables(variables map[string]string) error {
 // CreateProjectFromTemplate 从模板创建项目
 func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (*Project, error) {
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 开始从模板创建项目: templateId=%s, projectName=%s, appId=%s", templateId, projectName, appId))
-	
+
 	// 生成项目ID（同时作为相对路径）
 	projectID := fmt.Sprintf("%d", time.Now().UnixNano())
 	// 绝对路径用于创建目录和复制文件
 	projectAbsPath := a.getProjectAbsolutePath(projectID)
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 项目路径: id=%s, absPath=%s", projectID, projectAbsPath))
-	
+
 	// 创建项目目录
 	if err := os.MkdirAll(projectAbsPath, 0755); err != nil {
 		a.LogError(fmt.Sprintf("[TemplateCreate] 创建项目目录失败: path=%s, error=%v", projectAbsPath, err))
 		return nil, fmt.Errorf("创建项目目录失败: %v", err)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 项目目录创建成功: %s", projectAbsPath))
-	
+
 	// 根据模板ID复制脚本文件
 	var scripts []Script
 	var description string
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 开始复制模板文件: templateId=%s", templateId))
-	
+
 	switch templateId {
 	case "stable-diffusion":
 		description = "使用 SDXL 模型生成高质量图像，支持电商产品图、社媒营销图等业务场景"
@@ -604,13 +624,16 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 	case "z-image-turbo":
 		description = "阿里巴巴 Z-Image-Turbo 高效图像生成，6B 参数媲美 20B+ 模型，擅长照片级真实人像"
 		scripts = a.copyZImageTurboTemplate(projectAbsPath)
+	case "wan21-t2v":
+		description = "Wan 2.1 文生视频 (Text-to-Video)，阿里巴巴开源视频生成模型，支持 14B/1.3B 参数"
+		scripts = a.copyWan21T2VTemplate(projectAbsPath)
 	default:
 		a.LogError(fmt.Sprintf("[TemplateCreate] 未知的模板ID: %s", templateId))
 		return nil, fmt.Errorf("未知的模板ID: %s", templateId)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 模板文件复制完成: 脚本数量=%d", len(scripts)))
-	
+
 	// 创建项目（存储相对路径）
 	project := Project{
 		ID:          projectID,
@@ -623,7 +646,7 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	
+
 	// 保存项目
 	projects := a.GetProjects()
 	projects = append(projects, project)
@@ -631,7 +654,7 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 		a.LogError(fmt.Sprintf("[TemplateCreate] 保存项目配置失败: %v", err))
 		return nil, err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 项目创建成功: id=%s, name=%s, scripts=%d", projectID, projectName, len(scripts)))
 	return &project, nil
 }
@@ -640,9 +663,9 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "stable-diffusion")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Stable Diffusion 模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -652,11 +675,11 @@ func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
 		{"电商产品图批量生成", "sd_ecommerce_product.py", "解决：为每个产品生成多种风格展示图，提升上新效率"},
 		{"社媒营销图生成", "sd_social_media.py", "解决：运营每天需要大量配图，一键生成多平台尺寸"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
@@ -674,7 +697,7 @@ func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Stable Diffusion 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -683,9 +706,9 @@ func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
 func (a *App) copyAILLMTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "ai-llm")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 AI LLM 模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -698,11 +721,11 @@ func (a *App) copyAILLMTemplate(projectPath string) []Script {
 		{"Yi 零一万物", "yi_service.py", "零一万物 Yi，支持超长上下文"},
 		{"DeepSeek 翻译", "deepseek_service.py", "DeepSeek V3 翻译服务"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
@@ -720,7 +743,7 @@ func (a *App) copyAILLMTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] AI LLM 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -729,9 +752,9 @@ func (a *App) copyAILLMTemplate(projectPath string) []Script {
 func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "whisper-stt")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Whisper STT 模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -741,11 +764,11 @@ func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
 		{"会议纪要自动生成", "whisper_meeting_minutes.py", "解决：每次会议后整理纪要耗时 2 小时且容易遗漏"},
 		{"视频字幕自动生成", "whisper_subtitle.py", "解决：手动添加字幕每小时视频需要 4-6 小时"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
@@ -763,7 +786,7 @@ func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Whisper 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -772,9 +795,9 @@ func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
 func (a *App) copyEmbeddingServiceTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "embedding-service")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Embedding 模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -784,11 +807,11 @@ func (a *App) copyEmbeddingServiceTemplate(projectPath string) []Script {
 		{"企业知识库检索", "embedding_knowledge_base.py", "解决：传统关键词搜索找不到语义相关的文档内容"},
 		{"相似商品推荐", "embedding_similar_product.py", "解决：用户描述需求后无法匹配到相似商品"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
@@ -806,7 +829,7 @@ func (a *App) copyEmbeddingServiceTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Embedding 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -822,9 +845,9 @@ func (a *App) copySingleScript(sourceDir, projectPath, fileName, name, desc stri
 	scripts := []Script{}
 	sourcePath := filepath.Join(sourceDir, fileName)
 	destPath := filepath.Join(projectPath, fileName)
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制文件: %s -> %s", sourcePath, destPath))
-	
+
 	if data, err := os.ReadFile(sourcePath); err == nil {
 		if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 写入文件失败: %s, error=%v", destPath, writeErr))
@@ -841,7 +864,7 @@ func (a *App) copySingleScript(sourceDir, projectPath, fileName, name, desc stri
 	} else {
 		a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 	}
-	
+
 	return scripts
 }
 
@@ -849,9 +872,9 @@ func (a *App) copySingleScript(sourceDir, projectPath, fileName, name, desc stri
 func (a *App) copyRedisServerTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "redis-server")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Redis 服务器模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -860,11 +883,11 @@ func (a *App) copyRedisServerTemplate(projectPath string) []Script {
 		{"Redis 服务器", "redis_server.py", "部署 Redis 服务器，数据持久化到 Volume"},
 		{"Redis 客户端", "redis_client.py", "演示如何连接和使用 Redis 的各种功能"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		// 复制文件
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
@@ -883,7 +906,7 @@ func (a *App) copyRedisServerTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Redis 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -892,9 +915,9 @@ func (a *App) copyRedisServerTemplate(projectPath string) []Script {
 func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "comfyui-node-manager")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 ComfyUI 节点管理器模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -906,11 +929,11 @@ func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
 		{"4. 诊断检查", "diagnose.py", "检查 Volume 中的节点和模型状态"},
 		{"5. 重启服务", "restart_service.py", "重启 ComfyUI 以加载新添加的资源"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		// 复制文件
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
@@ -929,7 +952,7 @@ func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] ComfyUI 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -938,9 +961,9 @@ func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
 func (a *App) copyModalBasicsTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "modal-basics")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Modal 入门教程模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -961,11 +984,11 @@ func (a *App) copyModalBasicsTemplate(projectPath string) []Script {
 		{"13 - PDF 批量处理", "13_pdf_processor.py", "解决：HR/财务需要批量合并、拆分、加水印 PDF"},
 		{"14 - 多渠道通知服务", "14_notification_service.py", "解决：活动期间需要快速发送大量用户通知"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		// 复制文件
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
@@ -984,7 +1007,7 @@ func (a *App) copyModalBasicsTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Modal 入门教程模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
@@ -1047,9 +1070,9 @@ func (a *App) copyAPIGatewayTemplate(projectPath string) []Script {
 func (a *App) copyZImageTurboTemplate(projectPath string) []Script {
 	sourceDir := filepath.Join(a.projectsDir, "projects", "z-image-turbo")
 	scripts := []Script{}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Z-Image-Turbo 模板: sourceDir=%s", sourceDir))
-	
+
 	files := []struct {
 		name     string
 		fileName string
@@ -1061,11 +1084,11 @@ func (a *App) copyZImageTurboTemplate(projectPath string) []Script {
 		{"4. 模型管理", "manage_models.py", "列出/删除共享 Volume 中的模型"},
 		{"5. 诊断工具", "diagnose.py", "检查共享 Volume 和服务状态"},
 	}
-	
+
 	for i, f := range files {
 		sourcePath := filepath.Join(sourceDir, f.fileName)
 		destPath := filepath.Join(projectPath, f.fileName)
-		
+
 		if data, err := os.ReadFile(sourcePath); err == nil {
 			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
 				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
@@ -1083,8 +1106,49 @@ func (a *App) copyZImageTurboTemplate(projectPath string) []Script {
 			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
 		}
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] Z-Image-Turbo 模板复制完成: %d个文件", len(scripts)))
+	return scripts
+}
+
+// copyWan21T2VTemplate 复制 Wan 2.1 T2V 模板
+func (a *App) copyWan21T2VTemplate(projectPath string) []Script {
+	sourceDir := filepath.Join(a.projectsDir, "projects", "wan21-t2v")
+	scripts := []Script{}
+
+	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Wan 2.1 T2V 模板: sourceDir=%s", sourceDir))
+
+	files := []struct {
+		name     string
+		fileName string
+		desc     string
+	}{
+		{"Wan 2.1 T2V 部署", "wan21_t2v_deploy.py", "【一键部署】Wan 2.1 文生视频服务，支持 14B/1.3B 模型"},
+	}
+
+	for i, f := range files {
+		sourcePath := filepath.Join(sourceDir, f.fileName)
+		destPath := filepath.Join(projectPath, f.fileName)
+
+		if data, err := os.ReadFile(sourcePath); err == nil {
+			if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
+				a.LogError(fmt.Sprintf("[TemplateCopy] 写入失败: %s, error=%v", destPath, writeErr))
+				continue
+			}
+			a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制成功: %s (%d字节)", f.fileName, len(data)))
+			scripts = append(scripts, Script{
+				Name:        f.name,
+				Path:        f.fileName,
+				FullPath:    "",
+				Description: f.desc,
+				Order:       i,
+			})
+		} else {
+			a.LogError(fmt.Sprintf("[TemplateCopy] 读取源文件失败: %s, error=%v", sourcePath, err))
+		}
+	}
+
+	a.LogInfo(fmt.Sprintf("[TemplateCopy] Wan 2.1 T2V 模板复制完成: %d个文件", len(scripts)))
 	return scripts
 }
 
@@ -1116,7 +1180,7 @@ func (a *App) GetScripts(projectPath string) []Script {
 
 	// 计算项目的绝对路径（用于文件系统扫描）
 	projectAbsPath := a.getProjectAbsolutePath(projectPath)
-	
+
 	// 如果没有配置或配置为空，回退到扫描文件系统
 	scripts := []Script{}
 	filepath.Walk(projectAbsPath, func(path string, info os.FileInfo, err error) error {
@@ -1190,11 +1254,11 @@ func (a *App) DeployScript(scriptPath string, workDir string) CommandResult {
 func (a *App) DeployScriptWithContent(scriptPath string, workDir string, content string) CommandResult {
 	// 将相对路径转换为绝对路径
 	workDirAbs := a.getProjectAbsolutePath(workDir)
-	
+
 	// 创建临时文件存放替换变量后的内容
 	// 注意：Modal 不允许文件名包含多个点号，所以使用下划线前缀而不是点号
 	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
-	
+
 	// 写入临时文件
 	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
 		return CommandResult{
@@ -1203,13 +1267,13 @@ func (a *App) DeployScriptWithContent(scriptPath string, workDir string, content
 			Error:   fmt.Sprintf("创建临时文件失败: %v", err),
 		}
 	}
-	
+
 	// 确保在函数结束后删除临时文件
 	defer os.Remove(tempFile)
-	
+
 	// 查找项目并获取关联的 Modal App Token
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	// 使用临时文件执行
 	return a.RunModalCommandWithEnv("deploy", []string{filepath.Base(tempFile)}, workDir, tokenId, tokenSecret)
 }
@@ -1244,7 +1308,7 @@ func (a *App) ExecuteModalCommandWithToken(fullCommand, tokenId, tokenSecret str
 	// 设置环境变量
 	env := os.Environ()
 	env = append(env, "PYTHONIOENCODING=utf-8")
-	
+
 	// 如果提供了 Token，设置环境变量
 	if tokenId != "" && tokenSecret != "" {
 		env = append(env, "MODAL_TOKEN_ID="+tokenId)
@@ -1382,7 +1446,7 @@ func (a *App) RunModalCommandAsync(command string, args []string, workDir, token
 		// 合并 stdout 和 stderr，实时读取并发送
 		merged := io.MultiReader(stdout, stderr)
 		scanner := bufio.NewScanner(merged)
-		
+
 		// 增加 scanner 缓冲区大小，防止长行被截断
 		buf := make([]byte, 0, 64*1024)
 		scanner.Buffer(buf, 1024*1024)
@@ -1399,7 +1463,7 @@ func (a *App) RunModalCommandAsync(command string, args []string, workDir, token
 		a.cmdMutex.Lock()
 		a.runningCmd = nil
 		a.cmdMutex.Unlock()
-		
+
 		result := CommandResult{
 			Success: err == nil,
 			Output:  "",
@@ -1442,7 +1506,7 @@ func (a *App) DeployScriptAsync(scriptPath string, workDir string) {
 // RunScriptWithArgsAsync 异步运行脚本（带命令行参数）
 func (a *App) RunScriptWithArgsAsync(scriptPath string, workDir string, argsString string) {
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	// 构建参数列表
 	args := []string{scriptPath}
 	if argsString != "" {
@@ -1450,7 +1514,7 @@ func (a *App) RunScriptWithArgsAsync(scriptPath string, workDir string, argsStri
 		argParts := strings.Fields(argsString)
 		args = append(args, argParts...)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[RunWithArgs] 执行脚本: %s, 参数: %s", scriptPath, argsString))
 	a.RunModalCommandAsync("run", args, workDir, tokenId, tokenSecret)
 }
@@ -1460,20 +1524,20 @@ func (a *App) DeployScriptWithContentAsync(scriptPath string, workDir string, co
 	workDirAbs := a.getProjectAbsolutePath(workDir)
 	// 注意：Modal 不允许文件名包含多个点号，所以使用下划线前缀
 	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
-	
+
 	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
 		return fmt.Errorf("创建临时文件失败: %v", err)
 	}
-	
+
 	// 异步执行，完成后删除临时文件
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	go func() {
 		a.RunModalCommandAsync("deploy", []string{filepath.Base(tempFile)}, workDir, tokenId, tokenSecret)
 		// 注意：这里不能立即删除临时文件，因为命令是异步的
 		// 临时文件会在下次部署时被覆盖，或者可以在 command:complete 事件后清理
 	}()
-	
+
 	return nil
 }
 
@@ -1482,18 +1546,18 @@ func (a *App) RunScriptWithContentAsync(scriptPath string, workDir string, conte
 	workDirAbs := a.getProjectAbsolutePath(workDir)
 	// 注意：Modal 不允许文件名包含多个点号，所以使用下划线前缀
 	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
-	
+
 	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
 		return fmt.Errorf("创建临时文件失败: %v", err)
 	}
-	
+
 	// 异步执行
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	go func() {
 		a.RunModalCommandAsync("run", []string{filepath.Base(tempFile)}, workDir, tokenId, tokenSecret)
 	}()
-	
+
 	return nil
 }
 
@@ -1501,24 +1565,24 @@ func (a *App) RunScriptWithContentAsync(scriptPath string, workDir string, conte
 func (a *App) DeployScriptWithLogAsync(scriptPath string, workDir string, content string, projectID string, projectName string, scriptName string, variables map[string]string) (string, error) {
 	workDirAbs := a.getProjectAbsolutePath(workDir)
 	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
-	
+
 	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("创建临时文件失败: %v", err)
 	}
-	
+
 	// 创建执行日志
 	logID, err := a.CreateExecutionLog(projectID, projectName, scriptName, scriptPath, content, "deploy", variables)
 	if err != nil {
 		a.LogError(fmt.Sprintf("创建执行日志失败: %v", err))
 	}
-	
+
 	// 异步执行
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	go func() {
 		a.RunModalCommandAsyncWithLog("deploy", []string{filepath.Base(tempFile)}, workDir, tokenId, tokenSecret, logID)
 	}()
-	
+
 	return logID, nil
 }
 
@@ -1526,24 +1590,24 @@ func (a *App) DeployScriptWithLogAsync(scriptPath string, workDir string, conten
 func (a *App) RunScriptWithLogAsync(scriptPath string, workDir string, content string, projectID string, projectName string, scriptName string, variables map[string]string) (string, error) {
 	workDirAbs := a.getProjectAbsolutePath(workDir)
 	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
-	
+
 	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("创建临时文件失败: %v", err)
 	}
-	
+
 	// 创建执行日志
 	logID, err := a.CreateExecutionLog(projectID, projectName, scriptName, scriptPath, content, "run", variables)
 	if err != nil {
 		a.LogError(fmt.Sprintf("创建执行日志失败: %v", err))
 	}
-	
+
 	// 异步执行
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
-	
+
 	go func() {
 		a.RunModalCommandAsyncWithLog("run", []string{filepath.Base(tempFile)}, workDir, tokenId, tokenSecret, logID)
 	}()
-	
+
 	return logID, nil
 }
 
@@ -1557,7 +1621,7 @@ func (a *App) RunModalCommandAsyncWithLog(command string, args []string, workDir
 
 	go func() {
 		var outputBuilder strings.Builder
-		
+
 		modalPath := a.getModalPath()
 		cmd := exec.Command(modalPath, append([]string{command}, args...)...)
 		if workDir != "" {
@@ -1635,7 +1699,7 @@ func (a *App) RunModalCommandAsyncWithLog(command string, args []string, workDir
 			Success: err == nil,
 			Output:  outputBuilder.String(),
 		}
-		
+
 		status := "success"
 		if err != nil {
 			result.Error = err.Error()
@@ -1720,7 +1784,7 @@ func (a *App) SaveModalAppList(apps []ModalApp) error {
 // CreateModalApp 创建新的Modal应用配置
 func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSecret, workspace string) (*ModalApp, error) {
 	a.LogInfo(fmt.Sprintf("[ModalApp] 开始创建应用配置: name=%s, appName=%s, workspace=%s", name, appName, workspace))
-	
+
 	apps := a.GetModalAppList()
 
 	app := ModalApp{
@@ -1749,7 +1813,7 @@ func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSe
 // UpdateModalApp 更新Modal应用配置
 func (a *App) UpdateModalApp(id, name, appName, description, token, tokenId, tokenSecret, workspace string) error {
 	a.LogInfo(fmt.Sprintf("[ModalApp] 开始更新应用配置: id=%s, name=%s", id, name))
-	
+
 	apps := a.GetModalAppList()
 	found := false
 
@@ -1785,7 +1849,7 @@ func (a *App) UpdateModalApp(id, name, appName, description, token, tokenId, tok
 // DeleteModalApp 删除Modal应用配置
 func (a *App) DeleteModalApp(id string) error {
 	a.LogInfo(fmt.Sprintf("[ModalApp] 开始删除应用配置: id=%s", id))
-	
+
 	apps := a.GetModalAppList()
 	newApps := []ModalApp{}
 	var deletedApp *ModalApp
@@ -1890,7 +1954,7 @@ func (a *App) RunModalCommandWithTokenPair(command string, args []string, tokenI
 
 	// 设置环境变量
 	env := os.Environ()
-	
+
 	// 优先使用 tokenId 和 tokenSecret
 	if tokenId != "" && tokenSecret != "" {
 		env = append(env, "MODAL_TOKEN_ID="+tokenId)
@@ -2158,9 +2222,9 @@ func (a *App) ModalTokenSet(tokenId, tokenSecret string) CommandResult {
 // CreateScript 创建新脚本
 func (a *App) CreateScript(projectID, name, fileName, description, template string) error {
 	a.LogInfo(fmt.Sprintf("[CreateScript] 开始创建脚本: projectId=%s, name=%s, fileName=%s", projectID, name, fileName))
-	
+
 	projects := a.GetProjects()
-	
+
 	// 找到对应的项目
 	projectIndex := -1
 	var project *Project
@@ -2171,44 +2235,44 @@ func (a *App) CreateScript(projectID, name, fileName, description, template stri
 			break
 		}
 	}
-	
+
 	if project == nil {
 		a.LogError(fmt.Sprintf("[CreateScript] 创建失败: 项目不存在, projectId=%s", projectID))
 		return fmt.Errorf("项目不存在")
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[CreateScript] 找到项目: name=%s, path=%s", project.Name, project.Path))
-	
+
 	// 验证文件名
 	if !strings.HasSuffix(fileName, ".py") {
 		fileName = fileName + ".py"
 	}
-	
+
 	// 计算项目绝对路径
 	projectAbsPath := a.getProjectAbsolutePath(project.Path)
 	a.LogInfo(fmt.Sprintf("[CreateScript] 项目绝对路径: %s", projectAbsPath))
-	
+
 	// 创建脚本文件（使用绝对路径）
 	scriptAbsPath := filepath.Join(projectAbsPath, fileName)
-	
+
 	// 检查文件是否已存在
 	if _, err := os.Stat(scriptAbsPath); err == nil {
 		a.LogError(fmt.Sprintf("[CreateScript] 创建失败: 文件已存在, path=%s", scriptAbsPath))
 		return fmt.Errorf("文件已存在: %s", fileName)
 	}
-	
+
 	// 生成脚本内容
 	content := a.generateScriptContent(name, description, template, project.Name)
 	a.LogInfo(fmt.Sprintf("[CreateScript] 生成脚本内容, 长度=%d字节", len(content)))
-	
+
 	// 写入文件
 	if err := os.WriteFile(scriptAbsPath, []byte(content), 0644); err != nil {
 		a.LogError(fmt.Sprintf("[CreateScript] 写入文件失败: path=%s, error=%v", scriptAbsPath, err))
 		return fmt.Errorf("创建文件失败: %v", err)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[CreateScript] 文件写入成功: %s", scriptAbsPath))
-	
+
 	// 更新项目配置（只存储相对路径）
 	newScript := Script{
 		Name:        name,
@@ -2217,15 +2281,15 @@ func (a *App) CreateScript(projectID, name, fileName, description, template stri
 		Description: description,
 		Order:       len(project.Scripts),
 	}
-	
+
 	projects[projectIndex].Scripts = append(projects[projectIndex].Scripts, newScript)
 	projects[projectIndex].UpdatedAt = time.Now()
-	
+
 	if err := a.SaveProjects(projects); err != nil {
 		a.LogError(fmt.Sprintf("[CreateScript] 保存项目配置失败: %v", err))
 		return err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[CreateScript] 脚本创建成功: %s/%s", project.Name, fileName))
 	return nil
 }
@@ -2236,7 +2300,7 @@ func (a *App) generateScriptContent(name, description, template, appName string)
 	if strings.Contains(template, "import modal") || strings.HasPrefix(template, `"""`) || strings.HasPrefix(template, "#!/") {
 		return template
 	}
-	
+
 	if template == "" || template == "blank" {
 		return fmt.Sprintf(`#!/usr/bin/env python3
 """
@@ -2254,7 +2318,7 @@ if __name__ == "__main__":
     print("运行脚本: %s")
 `, name, description, appName, name)
 	}
-	
+
 	if template == "deploy" {
 		return fmt.Sprintf(`#!/usr/bin/env python3
 """
@@ -2279,7 +2343,7 @@ if __name__ == "__main__":
     print("使用 modal deploy 命令部署此脚本")
 `, description, appName)
 	}
-	
+
 	if template == "run" {
 		return fmt.Sprintf(`#!/usr/bin/env python3
 """
@@ -2304,7 +2368,7 @@ def main():
     print(f"结果: {result}")
 `, description, appName)
 	}
-	
+
 	// 默认空白模板
 	return fmt.Sprintf(`#!/usr/bin/env python3
 """
@@ -2323,9 +2387,9 @@ app = modal.App(name="%s")
 // DeleteScript 删除脚本
 func (a *App) DeleteScript(projectID, scriptPath string, deleteFile bool) error {
 	a.LogInfo(fmt.Sprintf("[DeleteScript] 开始删除脚本: projectId=%s, scriptPath=%s, deleteFile=%v", projectID, scriptPath, deleteFile))
-	
+
 	projects := a.GetProjects()
-	
+
 	// 找到对应的项目
 	projectIndex := -1
 	var project *Project
@@ -2336,12 +2400,12 @@ func (a *App) DeleteScript(projectID, scriptPath string, deleteFile bool) error 
 			break
 		}
 	}
-	
+
 	if project == nil {
 		a.LogError(fmt.Sprintf("[DeleteScript] 删除失败: 项目不存在, projectId=%s", projectID))
 		return fmt.Errorf("项目不存在")
 	}
-	
+
 	// 从 scripts 数组中删除
 	newScripts := []Script{}
 	var deletedScript *Script
@@ -2352,12 +2416,12 @@ func (a *App) DeleteScript(projectID, scriptPath string, deleteFile bool) error 
 			deletedScript = &script
 		}
 	}
-	
+
 	if deletedScript == nil {
 		a.LogError(fmt.Sprintf("[DeleteScript] 删除失败: 脚本不存在, scriptPath=%s", scriptPath))
 		return fmt.Errorf("脚本不存在")
 	}
-	
+
 	// 如果需要，删除实际文件
 	if deleteFile {
 		// 使用辅助函数计算绝对路径
@@ -2368,16 +2432,16 @@ func (a *App) DeleteScript(projectID, scriptPath string, deleteFile bool) error 
 			return fmt.Errorf("删除文件失败: %v", err)
 		}
 	}
-	
+
 	// 更新项目配置
 	projects[projectIndex].Scripts = newScripts
 	projects[projectIndex].UpdatedAt = time.Now()
-	
+
 	if err := a.SaveProjects(projects); err != nil {
 		a.LogError(fmt.Sprintf("[DeleteScript] 保存项目配置失败: %v", err))
 		return err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[DeleteScript] 脚本删除成功: %s/%s", project.Name, scriptPath))
 	return nil
 }
@@ -2385,9 +2449,9 @@ func (a *App) DeleteScript(projectID, scriptPath string, deleteFile bool) error 
 // ReorderScripts 重新排序脚本
 func (a *App) ReorderScripts(projectID string, scriptPaths []string) error {
 	a.LogInfo(fmt.Sprintf("[ReorderScripts] 开始重排序脚本: projectId=%s, count=%d", projectID, len(scriptPaths)))
-	
+
 	projects := a.GetProjects()
-	
+
 	// 找到对应的项目
 	projectIndex := -1
 	var project *Project
@@ -2398,18 +2462,18 @@ func (a *App) ReorderScripts(projectID string, scriptPaths []string) error {
 			break
 		}
 	}
-	
+
 	if project == nil {
 		a.LogError(fmt.Sprintf("[ReorderScripts] 重排序失败: 项目不存在, projectId=%s", projectID))
 		return fmt.Errorf("项目不存在")
 	}
-	
+
 	// 创建路径到脚本的映射
 	scriptMap := make(map[string]Script)
 	for _, script := range project.Scripts {
 		scriptMap[script.Path] = script
 	}
-	
+
 	// 按新顺序重建脚本数组
 	newScripts := []Script{}
 	for i, path := range scriptPaths {
@@ -2418,16 +2482,16 @@ func (a *App) ReorderScripts(projectID string, scriptPaths []string) error {
 			newScripts = append(newScripts, script)
 		}
 	}
-	
+
 	// 更新项目配置
 	projects[projectIndex].Scripts = newScripts
 	projects[projectIndex].UpdatedAt = time.Now()
-	
+
 	if err := a.SaveProjects(projects); err != nil {
 		a.LogError(fmt.Sprintf("[ReorderScripts] 保存项目配置失败: %v", err))
 		return err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[ReorderScripts] 脚本重排序成功: %s", project.Name))
 	return nil
 }
@@ -2435,9 +2499,9 @@ func (a *App) ReorderScripts(projectID string, scriptPaths []string) error {
 // MoveScript 移动脚本（上移或下移）
 func (a *App) MoveScript(projectID, scriptPath string, direction string) error {
 	a.LogInfo(fmt.Sprintf("[MoveScript] 开始移动脚本: projectId=%s, scriptPath=%s, direction=%s", projectID, scriptPath, direction))
-	
+
 	projects := a.GetProjects()
-	
+
 	// 找到对应的项目
 	projectIndex := -1
 	var project *Project
@@ -2448,12 +2512,12 @@ func (a *App) MoveScript(projectID, scriptPath string, direction string) error {
 			break
 		}
 	}
-	
+
 	if project == nil {
 		a.LogError(fmt.Sprintf("[MoveScript] 移动失败: 项目不存在, projectId=%s", projectID))
 		return fmt.Errorf("项目不存在")
 	}
-	
+
 	// 找到脚本的当前索引
 	currentIndex := -1
 	for i, script := range project.Scripts {
@@ -2462,12 +2526,12 @@ func (a *App) MoveScript(projectID, scriptPath string, direction string) error {
 			break
 		}
 	}
-	
+
 	if currentIndex == -1 {
 		a.LogError(fmt.Sprintf("[MoveScript] 移动失败: 脚本不存在, scriptPath=%s", scriptPath))
 		return fmt.Errorf("脚本不存在")
 	}
-	
+
 	// 计算新位置
 	newIndex := currentIndex
 	if direction == "up" && currentIndex > 0 {
@@ -2478,25 +2542,25 @@ func (a *App) MoveScript(projectID, scriptPath string, direction string) error {
 		a.LogInfo("[MoveScript] 脚本已在边界，无需移动")
 		return nil // 已经在边界，无需移动
 	}
-	
+
 	// 交换位置
 	scripts := project.Scripts
 	scripts[currentIndex], scripts[newIndex] = scripts[newIndex], scripts[currentIndex]
-	
+
 	// 更新 Order 字段
 	for i := range scripts {
 		scripts[i].Order = i
 	}
-	
+
 	// 更新项目配置
 	projects[projectIndex].Scripts = scripts
 	projects[projectIndex].UpdatedAt = time.Now()
-	
+
 	if err := a.SaveProjects(projects); err != nil {
 		a.LogError(fmt.Sprintf("[MoveScript] 保存项目配置失败: %v", err))
 		return err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[MoveScript] 脚本移动成功: %s %s", scriptPath, direction))
 	return nil
 }
@@ -2504,9 +2568,9 @@ func (a *App) MoveScript(projectID, scriptPath string, direction string) error {
 // UpdateScript 更新脚本元数据
 func (a *App) UpdateScript(projectID, scriptPath, name, description string) error {
 	a.LogInfo(fmt.Sprintf("[UpdateScript] 开始更新脚本: projectId=%s, scriptPath=%s, name=%s", projectID, scriptPath, name))
-	
+
 	projects := a.GetProjects()
-	
+
 	// 找到对应的项目
 	projectIndex := -1
 	var project *Project
@@ -2517,12 +2581,12 @@ func (a *App) UpdateScript(projectID, scriptPath, name, description string) erro
 			break
 		}
 	}
-	
+
 	if project == nil {
 		a.LogError(fmt.Sprintf("[UpdateScript] 更新失败: 项目不存在, projectId=%s", projectID))
 		return fmt.Errorf("项目不存在")
 	}
-	
+
 	// 找到并更新脚本
 	found := false
 	for i, script := range project.Scripts {
@@ -2533,20 +2597,20 @@ func (a *App) UpdateScript(projectID, scriptPath, name, description string) erro
 			break
 		}
 	}
-	
+
 	if !found {
 		a.LogError(fmt.Sprintf("[UpdateScript] 更新失败: 脚本不存在, scriptPath=%s", scriptPath))
 		return fmt.Errorf("脚本不存在")
 	}
-	
+
 	// 更新项目配置
 	projects[projectIndex].UpdatedAt = time.Now()
-	
+
 	if err := a.SaveProjects(projects); err != nil {
 		a.LogError(fmt.Sprintf("[UpdateScript] 保存项目配置失败: %v", err))
 		return err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[UpdateScript] 脚本更新成功: %s/%s", project.Name, scriptPath))
 	return nil
 }
@@ -2554,14 +2618,14 @@ func (a *App) UpdateScript(projectID, scriptPath, name, description string) erro
 // ReadScriptContent 读取脚本文件内容
 func (a *App) ReadScriptContent(scriptFullPath string) (string, error) {
 	a.LogInfo(fmt.Sprintf("[FileIO] 读取脚本文件: %s", scriptFullPath))
-	
+
 	// 读取文件内容
 	content, err := os.ReadFile(scriptFullPath)
 	if err != nil {
 		a.LogError(fmt.Sprintf("[FileIO] 读取脚本文件失败: path=%s, error=%v", scriptFullPath, err))
 		return "", fmt.Errorf("读取脚本文件失败: %v", err)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[FileIO] 读取成功: path=%s, size=%d字节", scriptFullPath, len(content)))
 	return string(content), nil
 }
@@ -2569,14 +2633,14 @@ func (a *App) ReadScriptContent(scriptFullPath string) (string, error) {
 // SaveScriptContent 保存脚本内容到文件（覆盖）
 func (a *App) SaveScriptContent(scriptFullPath, content string) error {
 	a.LogInfo(fmt.Sprintf("[FileIO] 保存脚本文件: path=%s, size=%d字节", scriptFullPath, len(content)))
-	
+
 	// 写入文件，覆盖原有内容
 	err := os.WriteFile(scriptFullPath, []byte(content), 0644)
 	if err != nil {
 		a.LogError(fmt.Sprintf("[FileIO] 保存脚本文件失败: path=%s, error=%v", scriptFullPath, err))
 		return fmt.Errorf("保存脚本文件失败: %v", err)
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("[FileIO] 保存成功: %s", scriptFullPath))
 	return nil
 }
@@ -2587,30 +2651,30 @@ func (a *App) FormatPythonCode(code string) (string, error) {
 	// 方法1: 直接使用 black 命令
 	cmd := exec.Command("black", "--quiet", "-")
 	cmd.Stdin = strings.NewReader(code)
-	
+
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		return string(output), nil
 	}
-	
+
 	// 方法2: 尝试使用 python -m black
 	cmd = exec.Command("python", "-m", "black", "--quiet", "-")
 	cmd.Stdin = strings.NewReader(code)
-	
+
 	output, err = cmd.CombinedOutput()
 	if err == nil {
 		return string(output), nil
 	}
-	
+
 	// 方法3: 尝试使用 python3 -m black
 	cmd = exec.Command("python3", "-m", "black", "--quiet", "-")
 	cmd.Stdin = strings.NewReader(code)
-	
+
 	output, err = cmd.CombinedOutput()
 	if err == nil {
 		return string(output), nil
 	}
-	
+
 	// 如果都失败了，返回友好的错误信息
 	return "", fmt.Errorf("未安装Black格式化工具。请运行: pip install black")
 }
@@ -2630,7 +2694,7 @@ type IDEConfig struct {
 // DetectInstalledIDEs 自动检测系统已安装的IDE
 func (a *App) DetectInstalledIDEs() []IDEConfig {
 	ides := []IDEConfig{}
-	
+
 	// VSCode
 	if vscodePath := a.detectVSCode(); vscodePath != "" {
 		ides = append(ides, IDEConfig{
@@ -2642,7 +2706,7 @@ func (a *App) DetectInstalledIDEs() []IDEConfig {
 			Detected: true,
 		})
 	}
-	
+
 	// Cursor
 	if cursorPath := a.detectCursor(); cursorPath != "" {
 		ides = append(ides, IDEConfig{
@@ -2654,7 +2718,7 @@ func (a *App) DetectInstalledIDEs() []IDEConfig {
 			Detected: true,
 		})
 	}
-	
+
 	// Windsurf
 	if windsurfPath := a.detectWindsurf(); windsurfPath != "" {
 		ides = append(ides, IDEConfig{
@@ -2666,7 +2730,7 @@ func (a *App) DetectInstalledIDEs() []IDEConfig {
 			Detected: true,
 		})
 	}
-	
+
 	// PyCharm
 	if pycharmPath := a.detectPyCharm(); pycharmPath != "" {
 		ides = append(ides, IDEConfig{
@@ -2678,7 +2742,7 @@ func (a *App) DetectInstalledIDEs() []IDEConfig {
 			Detected: true,
 		})
 	}
-	
+
 	// Sublime Text
 	if sublimePath := a.detectSublimeText(); sublimePath != "" {
 		ides = append(ides, IDEConfig{
@@ -2690,7 +2754,7 @@ func (a *App) DetectInstalledIDEs() []IDEConfig {
 			Detected: true,
 		})
 	}
-	
+
 	return ides
 }
 
@@ -2700,7 +2764,7 @@ func (a *App) detectVSCode() string {
 	if path, err := exec.LookPath("code"); err == nil {
 		return path
 	}
-	
+
 	// Windows常见路径
 	homeDir, _ := os.UserHomeDir()
 	possiblePaths := []string{
@@ -2708,13 +2772,13 @@ func (a *App) detectVSCode() string {
 		"C:\\Program Files\\Microsoft VS Code\\Code.exe",
 		"C:\\Program Files (x86)\\Microsoft VS Code\\Code.exe",
 	}
-	
+
 	for _, p := range possiblePaths {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
-	
+
 	return ""
 }
 
@@ -2724,19 +2788,19 @@ func (a *App) detectCursor() string {
 	if path, err := exec.LookPath("cursor"); err == nil {
 		return path
 	}
-	
+
 	homeDir, _ := os.UserHomeDir()
 	possiblePaths := []string{
 		filepath.Join(homeDir, "AppData", "Local", "Programs", "Cursor", "Cursor.exe"),
 		filepath.Join(homeDir, "AppData", "Local", "cursor", "Cursor.exe"),
 	}
-	
+
 	for _, p := range possiblePaths {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
-	
+
 	return ""
 }
 
@@ -2746,26 +2810,26 @@ func (a *App) detectWindsurf() string {
 	if path, err := exec.LookPath("windsurf"); err == nil {
 		return path
 	}
-	
+
 	homeDir, _ := os.UserHomeDir()
 	possiblePaths := []string{
 		filepath.Join(homeDir, "AppData", "Local", "Programs", "Windsurf", "Windsurf.exe"),
 		filepath.Join(homeDir, "AppData", "Local", "windsurf", "Windsurf.exe"),
 	}
-	
+
 	for _, p := range possiblePaths {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
-	
+
 	return ""
 }
 
 // detectPyCharm 检测PyCharm
 func (a *App) detectPyCharm() string {
 	homeDir, _ := os.UserHomeDir()
-	
+
 	// JetBrains Toolbox常见路径
 	toolboxPath := filepath.Join(homeDir, "AppData", "Local", "JetBrains", "Toolbox", "apps", "PyCharm-P")
 	if info, err := os.Stat(toolboxPath); err == nil && info.IsDir() {
@@ -2780,19 +2844,19 @@ func (a *App) detectPyCharm() string {
 			}
 		}
 	}
-	
+
 	// 标准安装路径
 	possiblePaths := []string{
 		"C:\\Program Files\\JetBrains\\PyCharm\\bin\\pycharm64.exe",
 		"C:\\Program Files (x86)\\JetBrains\\PyCharm\\bin\\pycharm64.exe",
 	}
-	
+
 	for _, p := range possiblePaths {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
-	
+
 	return ""
 }
 
@@ -2802,19 +2866,19 @@ func (a *App) detectSublimeText() string {
 	if path, err := exec.LookPath("subl"); err == nil {
 		return path
 	}
-	
+
 	possiblePaths := []string{
 		"C:\\Program Files\\Sublime Text\\sublime_text.exe",
 		"C:\\Program Files\\Sublime Text 3\\sublime_text.exe",
 		"C:\\Program Files (x86)\\Sublime Text\\sublime_text.exe",
 	}
-	
+
 	for _, p := range possiblePaths {
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 	}
-	
+
 	return ""
 }
 
@@ -2824,10 +2888,10 @@ func (a *App) OpenInIDE(idePath, filePath string) error {
 	if _, err := os.Stat(filePath); err != nil {
 		return fmt.Errorf("文件不存在: %s", filePath)
 	}
-	
+
 	// 根据IDE路径判断使用哪个命令
 	var cmd *exec.Cmd
-	
+
 	if strings.Contains(strings.ToLower(idePath), "code") {
 		// VSCode
 		cmd = exec.Command(idePath, filePath)
@@ -2847,13 +2911,13 @@ func (a *App) OpenInIDE(idePath, filePath string) error {
 		// 默认方式
 		cmd = exec.Command(idePath, filePath)
 	}
-	
+
 	// 异步启动，不等待完成
 	err := cmd.Start()
 	if err != nil {
 		return fmt.Errorf("打开IDE失败: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -2899,12 +2963,12 @@ type OpenAIResponse struct {
 func (a *App) GetAIConfigs() []AIConfig {
 	configs := []AIConfig{}
 	configPath := filepath.Join(a.projectsDir, "ai_config.json")
-	
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return configs
 	}
-	
+
 	json.Unmarshal(data, &configs)
 	return configs
 }
@@ -2936,7 +3000,7 @@ func (a *App) GetDefaultAIConfig() *AIConfig {
 // CreateAIConfig 创建AI配置
 func (a *App) CreateAIConfig(name, provider, baseURL, apiKey, model string, temperature float32, maxTokens int) (*AIConfig, error) {
 	configs := a.GetAIConfigs()
-	
+
 	config := AIConfig{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:        name,
@@ -2950,19 +3014,19 @@ func (a *App) CreateAIConfig(name, provider, baseURL, apiKey, model string, temp
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
-	
+
 	configs = append(configs, config)
 	if err := a.SaveAIConfigs(configs); err != nil {
 		return nil, err
 	}
-	
+
 	return &config, nil
 }
 
 // UpdateAIConfig 更新AI配置
 func (a *App) UpdateAIConfig(id, name, provider, baseURL, apiKey, model string, temperature float32, maxTokens int) error {
 	configs := a.GetAIConfigs()
-	
+
 	for i := range configs {
 		if configs[i].ID == id {
 			configs[i].Name = name
@@ -2976,7 +3040,7 @@ func (a *App) UpdateAIConfig(id, name, provider, baseURL, apiKey, model string, 
 			break
 		}
 	}
-	
+
 	return a.SaveAIConfigs(configs)
 }
 
@@ -2984,24 +3048,24 @@ func (a *App) UpdateAIConfig(id, name, provider, baseURL, apiKey, model string, 
 func (a *App) DeleteAIConfig(id string) error {
 	configs := a.GetAIConfigs()
 	newConfigs := []AIConfig{}
-	
+
 	for _, config := range configs {
 		if config.ID != id {
 			newConfigs = append(newConfigs, config)
 		}
 	}
-	
+
 	return a.SaveAIConfigs(newConfigs)
 }
 
 // SetDefaultAIConfig 设置默认AI配置
 func (a *App) SetDefaultAIConfig(id string) error {
 	configs := a.GetAIConfigs()
-	
+
 	for i := range configs {
 		configs[i].IsDefault = (configs[i].ID == id)
 	}
-	
+
 	return a.SaveAIConfigs(configs)
 }
 
@@ -3017,13 +3081,13 @@ func (a *App) TestAIConnection(baseURL, apiKey, model string) (string, error) {
 		},
 		Temperature: 0.7,
 	}
-	
+
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		a.LogError(fmt.Sprintf("构建测试请求失败: %v", err))
 		return "", fmt.Errorf("构建请求失败: %v", err)
 	}
-	
+
 	// 发送HTTP请求
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
@@ -3031,10 +3095,10 @@ func (a *App) TestAIConnection(baseURL, apiKey, model string) (string, error) {
 		a.LogError(fmt.Sprintf("创建测试请求失败: %v", err))
 		return "", fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -3042,13 +3106,13 @@ func (a *App) TestAIConnection(baseURL, apiKey, model string) (string, error) {
 		return "", fmt.Errorf("连接失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		a.LogError(fmt.Sprintf("AI服务返回错误 (%d): %s", resp.StatusCode, string(body)))
 		return "", fmt.Errorf("API返回错误 (%d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	a.LogInfo("AI连接测试成功")
 	return "连接成功！", nil
 }
@@ -3070,14 +3134,14 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 			}
 		}
 	}
-	
+
 	if config == nil {
 		a.LogError("AI分析失败: 未找到AI配置")
 		return "", fmt.Errorf("未找到AI配置，请先配置AI")
 	}
 
 	a.LogInfo(fmt.Sprintf("使用AI配置: %s (%s)", config.Name, config.Model))
-	
+
 	// 构建分析提示词
 	prompt := fmt.Sprintf(`你是一个专业的Python代码专家。请优化以下代码：
 
@@ -3090,7 +3154,7 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 3. 修复潜在的 bug 和性能问题。
 4. 保持原有的功能逻辑不变，除非有明显的错误。
 5. 输出格式要求：请使用Markdown代码块包裹代码，并在代码块之前简要说明（1-2句话）做了哪些主要优化。`, code)
-	
+
 	// 构建请求
 	reqBody := OpenAIRequest{
 		Model: config.Model,
@@ -3099,30 +3163,30 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 		},
 		Temperature: config.Temperature,
 	}
-	
+
 	if config.MaxTokens > 0 {
 		reqBody.MaxTokens = config.MaxTokens
 	}
-	
+
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		a.LogError(fmt.Sprintf("构建请求失败: %v", err))
 		return "", fmt.Errorf("构建请求失败: %v", err)
 	}
-	
+
 	// 发送HTTP请求
 	url := strings.TrimSuffix(config.BaseURL, "/") + "/chat/completions"
 	a.LogInfo(fmt.Sprintf("发送请求至: %s", url))
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		a.LogError(fmt.Sprintf("创建请求失败: %v", err))
 		return "", fmt.Errorf("创建请求失败: %v", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+config.APIKey)
-	
+
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -3130,7 +3194,7 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 		return "", fmt.Errorf("请求失败: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// 读取响应内容
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -3144,7 +3208,7 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 		a.LogError(fmt.Sprintf("API返回错误 (%d): %s", resp.StatusCode, bodyStr))
 		return "", fmt.Errorf("API返回错误 (%d): %s", resp.StatusCode, bodyStr)
 	}
-	
+
 	// 解析响应
 	var apiResp OpenAIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
@@ -3152,12 +3216,12 @@ func (a *App) AnalyzeCode(code, configID string) (string, error) {
 		a.LogError(fmt.Sprintf("解析JSON响应失败: %v. 原始响应: %s", err, string(body)))
 		return "", fmt.Errorf("解析响应失败: %v", err)
 	}
-	
+
 	if len(apiResp.Choices) == 0 {
 		a.LogError("API返回空响应: choices为空")
 		return "", fmt.Errorf("API返回空响应")
 	}
-	
+
 	a.LogInfo("AI分析完成")
 	return apiResp.Choices[0].Message.Content, nil
 }
@@ -3172,37 +3236,37 @@ func (a *App) getExecutionLogsPath() string {
 // loadExecutionLogs 加载所有执行日志
 func (a *App) loadExecutionLogs() ([]ExecutionLog, error) {
 	logsPath := a.getExecutionLogsPath()
-	
+
 	if _, err := os.Stat(logsPath); os.IsNotExist(err) {
 		return []ExecutionLog{}, nil
 	}
-	
+
 	data, err := os.ReadFile(logsPath)
 	if err != nil {
 		return nil, fmt.Errorf("读取执行日志文件失败: %v", err)
 	}
-	
+
 	var logs []ExecutionLog
 	if err := json.Unmarshal(data, &logs); err != nil {
 		return nil, fmt.Errorf("解析执行日志失败: %v", err)
 	}
-	
+
 	return logs, nil
 }
 
 // saveExecutionLogs 保存所有执行日志
 func (a *App) saveExecutionLogs(logs []ExecutionLog) error {
 	logsPath := a.getExecutionLogsPath()
-	
+
 	data, err := json.MarshalIndent(logs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化执行日志失败: %v", err)
 	}
-	
+
 	if err := os.WriteFile(logsPath, data, 0644); err != nil {
 		return fmt.Errorf("写入执行日志文件失败: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -3213,10 +3277,10 @@ func (a *App) CreateExecutionLog(projectID, projectName, scriptName, scriptPath,
 		a.LogError(fmt.Sprintf("加载执行日志失败: %v", err))
 		logs = []ExecutionLog{}
 	}
-	
+
 	// 生成唯一 ID
 	logID := fmt.Sprintf("%d", time.Now().UnixNano())
-	
+
 	newLog := ExecutionLog{
 		ID:            logID,
 		ProjectID:     projectID,
@@ -3231,19 +3295,19 @@ func (a *App) CreateExecutionLog(projectID, projectName, scriptName, scriptPath,
 		Status:        "running",
 		Output:        "",
 	}
-	
+
 	// 添加到列表开头（最新的在前面）
 	logs = append([]ExecutionLog{newLog}, logs...)
-	
+
 	// 限制日志数量（保留最近 500 条）
 	if len(logs) > 500 {
 		logs = logs[:500]
 	}
-	
+
 	if err := a.saveExecutionLogs(logs); err != nil {
 		return "", err
 	}
-	
+
 	a.LogInfo(fmt.Sprintf("创建执行日志: %s - %s", projectName, scriptName))
 	return logID, nil
 }
@@ -3254,7 +3318,7 @@ func (a *App) UpdateExecutionLog(logID string, status string, output string) err
 	if err != nil {
 		return err
 	}
-	
+
 	for i, log := range logs {
 		if log.ID == logID {
 			logs[i].Status = status
@@ -3263,7 +3327,7 @@ func (a *App) UpdateExecutionLog(logID string, status string, output string) err
 			break
 		}
 	}
-	
+
 	return a.saveExecutionLogs(logs)
 }
 
@@ -3273,7 +3337,7 @@ func (a *App) GetExecutionLogs(projectID string, limit int) ([]ExecutionLog, err
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 按项目筛选
 	if projectID != "" {
 		filtered := []ExecutionLog{}
@@ -3284,12 +3348,12 @@ func (a *App) GetExecutionLogs(projectID string, limit int) ([]ExecutionLog, err
 		}
 		logs = filtered
 	}
-	
+
 	// 限制返回数量
 	if limit > 0 && len(logs) > limit {
 		logs = logs[:limit]
 	}
-	
+
 	return logs, nil
 }
 
@@ -3299,13 +3363,13 @@ func (a *App) GetExecutionLogDetail(logID string) (*ExecutionLog, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for _, log := range logs {
 		if log.ID == logID {
 			return &log, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("日志不存在: %s", logID)
 }
 
@@ -3315,14 +3379,14 @@ func (a *App) DeleteExecutionLog(logID string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	filtered := []ExecutionLog{}
 	for _, log := range logs {
 		if log.ID != logID {
 			filtered = append(filtered, log)
 		}
 	}
-	
+
 	return a.saveExecutionLogs(filtered)
 }
 
@@ -3332,20 +3396,20 @@ func (a *App) ClearExecutionLogs(projectID string) error {
 		// 清空所有
 		return a.saveExecutionLogs([]ExecutionLog{})
 	}
-	
+
 	// 只清空指定项目的日志
 	logs, err := a.loadExecutionLogs()
 	if err != nil {
 		return err
 	}
-	
+
 	filtered := []ExecutionLog{}
 	for _, log := range logs {
 		if log.ProjectID != projectID {
 			filtered = append(filtered, log)
 		}
 	}
-	
+
 	return a.saveExecutionLogs(filtered)
 }
 
@@ -3354,29 +3418,29 @@ func (a *App) ClearExecutionLogs(projectID string) error {
 // SelectFile 打开文件选择对话框
 func (a *App) SelectFile(title string, filterPattern string, filterDisplay string) (string, error) {
 	filters := []runtime.FileFilter{}
-	
+
 	if filterPattern != "" {
 		filters = append(filters, runtime.FileFilter{
 			DisplayName: filterDisplay,
 			Pattern:     filterPattern,
 		})
 	}
-	
+
 	// 添加所有文件选项
 	filters = append(filters, runtime.FileFilter{
 		DisplayName: "所有文件 (*.*)",
 		Pattern:     "*.*",
 	})
-	
+
 	filePath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   title,
 		Filters: filters,
 	})
-	
+
 	if err != nil {
 		return "", err
 	}
-	
+
 	return filePath, nil
 }
 

@@ -9,12 +9,12 @@ import Button from '../components/Button';
 import VariableFormDialog from '../components/VariableFormDialog';
 import { main } from '../../wailsjs/go/models';
 import { GetModalAppList, CreateProjectFromTemplate, GetProjects, CreateScript } from '../../wailsjs/go/main/App';
-import { 
-  scriptTemplates, 
-  ScriptTemplate, 
-  getScriptTemplateCategories, 
+import {
+  scriptTemplates,
+  ScriptTemplate,
+  getScriptTemplateCategories,
   filterScriptTemplates,
-  replaceTemplateVariables 
+  replaceTemplateVariables
 } from '../data/scriptTemplates';
 
 // ============================================================================
@@ -111,10 +111,10 @@ const projectTemplates: ProjectTemplate[] = [
     icon: 'sparkles',
     tags: ['ComfyUI', 'Flux', '图像生成', 'Volume', '模型管理'],
     scripts: [
-      { 
-        name: 'ComfyUI 主应用', 
-        fileName: 'comfyui_app.py', 
-        description: '完整服务：环境配置 + 模型下载 + UI/API 服务', 
+      {
+        name: 'ComfyUI 主应用',
+        fileName: 'comfyui_app.py',
+        description: '完整服务：环境配置 + 模型下载 + UI/API 服务',
         content: `"""
 =============================================================================
 ComfyUI 完整应用服务
@@ -159,12 +159,12 @@ app = modal.App(name=APP_NAME, image=image)
 def ui():
     """ComfyUI Web 界面"""
     subprocess.Popen("comfy launch -- --listen 0.0.0.0 --port 8000", shell=True)
-` 
+`
       },
-      { 
-        name: '添加模型 (HuggingFace)', 
-        fileName: 'add_model_hf.py', 
-        description: '从 HuggingFace 下载模型到共享 Volume', 
+      {
+        name: '添加模型 (HuggingFace)',
+        fileName: 'add_model_hf.py',
+        description: '从 HuggingFace 下载模型到共享 Volume',
         content: `"""
 =============================================================================
 ComfyUI 添加模型 (HuggingFace)
@@ -291,12 +291,12 @@ def main():
             print(f"\\n✅ 模型已存在，无需下载")
     else:
         print(f"\\n❌ 失败: {result.get('error')}")
-` 
+`
       },
-      { 
-        name: '添加模型 (URL)', 
-        fileName: 'add_model_url.py', 
-        description: '从 URL 直接下载模型到共享 Volume', 
+      {
+        name: '添加模型 (URL)',
+        fileName: 'add_model_url.py',
+        description: '从 URL 直接下载模型到共享 Volume',
         content: `"""
 =============================================================================
 ComfyUI 添加模型 (URL)
@@ -414,12 +414,12 @@ def main():
             print(f"\\n✅ 模型已存在，无需下载")
     else:
         print(f"\\n❌ 失败: {result.get('error')}")
-` 
+`
       },
-      { 
-        name: '添加自定义节点', 
-        fileName: 'add_node.py', 
-        description: '从 Git 仓库安装自定义节点到 ComfyUI', 
+      {
+        name: '添加自定义节点',
+        fileName: 'add_node.py',
+        description: '从 Git 仓库安装自定义节点到 ComfyUI',
         content: `"""
 =============================================================================
 ComfyUI 添加自定义节点
@@ -585,12 +585,12 @@ def main():
         print(f"   然后访问 ComfyUI URL，服务会自动重启并加载节点")
     else:
         print(f"\\n❌ 失败: {result.get('error')}")
-` 
+`
       },
-      { 
-        name: '诊断工具', 
-        fileName: 'diagnose.py', 
-        description: '检查共享 Volume 中的模型和节点状态', 
+      {
+        name: '诊断工具',
+        fileName: 'diagnose.py',
+        description: '检查共享 Volume 中的模型和节点状态',
         content: `"""
 =============================================================================
 ComfyUI 诊断工具
@@ -730,7 +730,7 @@ def main():
     print("\\n🔍 开始诊断 ComfyUI Volume...")
     result = diagnose.remote()
     print("\\n✅ 诊断完成")
-` 
+`
       }
     ]
   },
@@ -742,10 +742,10 @@ def main():
     icon: 'sparkles',
     tags: ['Z-Image', 'ComfyUI', '图像生成', '热加载', 'L40S', '真实人像'],
     scripts: [
-      { 
-        name: 'Z-Image 主服务', 
-        fileName: 'z_image_app.py', 
-        description: 'ComfyUI + 热加载 API 完整服务', 
+      {
+        name: 'Z-Image 主服务',
+        fileName: 'z_image_app.py',
+        description: 'ComfyUI + 热加载 API 完整服务',
         content: `"""
 =============================================================================
 Z-Image-Turbo ComfyUI 应用服务
@@ -909,12 +909,12 @@ def main():
     print("   1. 部署: modal deploy z_image_app.py")
     print("   2. 添加模型: 使用'添加模型'脚本")
     print(f"   3. 访问 UI: https://[workspace]--{APP_NAME}-ui.modal.run")
-` 
+`
       },
-      { 
-        name: '添加模型 (HuggingFace)', 
-        fileName: 'add_model_hf.py', 
-        description: '从 HuggingFace 下载模型到共享 Volume，支持自动热加载', 
+      {
+        name: '添加模型 (HuggingFace)',
+        fileName: 'add_model_hf.py',
+        description: '从 HuggingFace 下载模型到共享 Volume，支持自动热加载',
         content: `"""
 =============================================================================
 Z-Image-Turbo 添加模型 (HuggingFace)
@@ -1070,10 +1070,10 @@ def main():
         print(f"\\n❌ 失败: {result.get('error')}")
 `
       },
-      { 
-        name: '添加模型 (URL)', 
-        fileName: 'add_model_url.py', 
-        description: '从 URL 直接下载模型到共享 Volume，支持自动热加载', 
+      {
+        name: '添加模型 (URL)',
+        fileName: 'add_model_url.py',
+        description: '从 URL 直接下载模型到共享 Volume，支持自动热加载',
         content: `"""
 =============================================================================
 Z-Image-Turbo 添加模型 (URL)
@@ -1219,10 +1219,10 @@ def main():
         print(f"\\n❌ 失败: {result.get('error')}")
 `
       },
-      { 
-        name: '添加模型 (本地上传)', 
-        fileName: 'add_model_local.py', 
-        description: '从本地上传模型文件到共享 Volume，支持自动热加载', 
+      {
+        name: '添加模型 (本地上传)',
+        fileName: 'add_model_local.py',
+        description: '从本地上传模型文件到共享 Volume，支持自动热加载',
         content: `"""
 =============================================================================
 Z-Image-Turbo 添加模型 (本地上传)
@@ -1380,10 +1380,10 @@ def main(local_path: str = LOCAL_FILE_PATH, type: str = MODEL_TYPE):
         print(f"\\n❌ 失败: {result.get('error')}")
 `
       },
-      { 
-        name: '模型管理', 
-        fileName: 'manage_models.py', 
-        description: '列出共享 Volume 中的所有模型', 
+      {
+        name: '模型管理',
+        fileName: 'manage_models.py',
+        description: '列出共享 Volume 中的所有模型',
         content: `"""
 =============================================================================
 Z-Image-Turbo 模型管理
@@ -1460,10 +1460,10 @@ def main():
     list_models.remote()
 `
       },
-      { 
-        name: '诊断工具', 
-        fileName: 'diagnose.py', 
-        description: '检查共享 Volume 和服务状态', 
+      {
+        name: '诊断工具',
+        fileName: 'diagnose.py',
+        description: '检查共享 Volume 和服务状态',
         content: `"""
 =============================================================================
 Z-Image-Turbo 诊断工具
@@ -1545,6 +1545,25 @@ def diagnose():
 def main():
     print("\\n🔍 开始诊断 Z-Image-Turbo...")
     diagnose.remote()
+`
+      }
+    ]
+  },
+  {
+    id: 'wan21-t2v',
+    name: 'Wan 2.1 文生视频',
+    description: 'Wan 2.1 Text-to-Video，阿里巴巴开源视频生成模型，支持 14B/1.3B 参数',
+    category: '视频生成',
+    icon: 'sparkles',
+    tags: ['Wan2.1', 'T2V', '文生视频', 'ComfyUI', 'L40S'],
+    scripts: [
+      {
+        name: 'Wan 2.1 T2V 部署',
+        fileName: 'wan21_t2v_deploy.py',
+        description: '【一键部署】Wan 2.1 文生视频服务，自动下载模型并启动 ComfyUI',
+        content: `# Wan 2.1 T2V 部署脚本
+# 请使用 Modal Manager 创建项目后，脚本会自动从模板复制
+# 部署命令: modal deploy wan21_t2v_deploy.py
 `
       }
     ]
@@ -1680,10 +1699,10 @@ def main():
 
 export default function TemplateLibrary() {
   const navigate = useNavigate();
-  
+
   // Tab 状态
   const [activeTab, setActiveTab] = useState<'project' | 'script'>('project');
-  
+
   // 项目模板状态
   const [apps, setApps] = useState<main.ModalApp[]>([]);
   const [projects, setProjects] = useState<main.Project[]>([]);
@@ -1692,7 +1711,7 @@ export default function TemplateLibrary() {
   const [projectName, setProjectName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [projectFilter, setProjectFilter] = useState<string>('all');
-  
+
   // 脚本模板状态
   const [scriptFilter, setScriptFilter] = useState<string>('全部');
   const [selectedScriptTemplate, setSelectedScriptTemplate] = useState<ScriptTemplate | null>(null);
@@ -1719,8 +1738,8 @@ export default function TemplateLibrary() {
 
   // 项目模板分类
   const projectCategories = ['all', ...Array.from(new Set(projectTemplates.map(t => t.category)))];
-  const filteredProjectTemplates = projectFilter === 'all' 
-    ? projectTemplates 
+  const filteredProjectTemplates = projectFilter === 'all'
+    ? projectTemplates
     : projectTemplates.filter(t => t.category === projectFilter);
 
   // 脚本模板分类
@@ -1799,9 +1818,9 @@ export default function TemplateLibrary() {
       return;
     }
     if (!selectedScriptTemplate) return;
-    
+
     const hasVariables = selectedScriptTemplate.variables.length > 0;
-    
+
     console.log('[TemplateLibrary] 使用脚本模板:', {
       templateId: selectedScriptTemplate.id,
       templateName: selectedScriptTemplate.name,
@@ -1811,7 +1830,7 @@ export default function TemplateLibrary() {
       hasVariables,
       variableCount: selectedScriptTemplate.variables.length
     });
-    
+
     if (createMode === 'configure' && hasVariables) {
       // 模式 A + 有变量: 弹出变量表单，填写后创建独立脚本
       console.log('[TemplateLibrary] 打开变量配置对话框');
@@ -1822,13 +1841,13 @@ export default function TemplateLibrary() {
       try {
         const fileName = scriptFileName.endsWith('.py') ? scriptFileName : `${scriptFileName}.py`;
         const isTemplate = createMode === 'template' && hasVariables;
-        
+
         console.log('[TemplateLibrary] 调用后端创建脚本:', {
           fileName,
           isTemplate,
           contentLength: selectedScriptTemplate.content.length
         });
-        
+
         await CreateScript(
           targetProjectId,
           selectedScriptTemplate.name,
@@ -1843,7 +1862,7 @@ export default function TemplateLibrary() {
         setSelectedScriptTemplate(null);
         setTargetProjectId('');
         setCreateMode('configure');
-        
+
         navigate(`/project/${targetProjectId}`);
       } catch (err: any) {
         console.error('[TemplateLibrary] 脚本创建失败:', err);
@@ -1870,9 +1889,9 @@ export default function TemplateLibrary() {
     try {
       // 确保文件名以 .py 结尾
       const fileName = scriptFileName.endsWith('.py') ? scriptFileName : `${scriptFileName}.py`;
-      
+
       console.log('[TemplateLibrary] 调用后端创建脚本:', fileName);
-      
+
       // 创建脚本
       await CreateScript(
         targetProjectId,
@@ -1888,7 +1907,7 @@ export default function TemplateLibrary() {
       setShowUseTemplateDialog(false);
       setSelectedScriptTemplate(null);
       setTargetProjectId('');
-      
+
       // 跳转到项目页面
       navigate(`/project/${targetProjectId}`);
     } catch (err: any) {
@@ -2142,7 +2161,7 @@ export default function TemplateLibrary() {
                   <p className="text-xs text-gray-500">{selectedScriptTemplate.category}</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => { setSelectedScriptTemplate(null); setShowUseTemplateDialog(false); }}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               >
@@ -2217,7 +2236,7 @@ export default function TemplateLibrary() {
                       userSelect: 'none',
                     }}
                   >
-                    {selectedScriptTemplate.content.length > 3000 
+                    {selectedScriptTemplate.content.length > 3000
                       ? selectedScriptTemplate.content.slice(0, 3000) + '\n\n# ... (内容已截断)'
                       : selectedScriptTemplate.content}
                   </SyntaxHighlighter>
@@ -2312,8 +2331,8 @@ export default function TemplateLibrary() {
                   createMode === 'configure' ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"
                 )}>
                   {selectedScriptTemplate.variables.length > 0 ? (
-                    createMode === 'configure' 
-                      ? `现在填写 ${selectedScriptTemplate.variables.length} 个参数，创建独立脚本（变量将被替换）` 
+                    createMode === 'configure'
+                      ? `现在填写 ${selectedScriptTemplate.variables.length} 个参数，创建独立脚本（变量将被替换）`
                       : `保留变量占位符，每次部署时弹窗填写参数`
                   ) : (
                     createMode === 'configure'
