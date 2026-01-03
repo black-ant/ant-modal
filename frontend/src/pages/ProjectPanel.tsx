@@ -8,6 +8,7 @@ import Button from '../components/Button';
 import ScriptEditor from '../components/ScriptEditor';
 import CreateScriptDialog from '../components/CreateScriptDialog';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import ExecuteConfirmDialog from '../components/ExecuteConfirmDialog';
 import ExecuteVariableDialog, { hasTemplateVariables } from '../components/ExecuteVariableDialog';
 import DeployArgsDialog, { hasModalArgs } from '../components/DeployArgsDialog';
 import ProjectVariablesDialog from '../components/ProjectVariablesDialog';
@@ -71,9 +72,9 @@ const searchHighlightTheme = EditorView.baseTheme({
   },
 });
 import { main } from '../../wailsjs/go/models';
-import { 
-  GetProjects, 
-  GetScripts, 
+import {
+  GetProjects,
+  GetScripts,
   DeployScriptAsync,
   DeployScriptWithContentAsync,
   RunScriptAsync,
@@ -82,6 +83,9 @@ import {
   DeployScriptWithLogAsync,
   RunScriptWithLogAsync,
   GetModalAppByID,
+  GetModalAppList,
+  DeployScriptToAppAsync,
+  RunScriptToAppAsync,
   // App 相关
   ModalAppListWithTokenPair,
   ModalAppStopWithTokenPair,
@@ -152,6 +156,12 @@ export default function ProjectPanel() {
   const outputRef = useRef<HTMLDivElement>(null);
   // 命令行参数对话框状态
   const [showArgsDialog, setShowArgsDialog] = useState(false);
+  // 执行确认对话框状态
+  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+  const [pendingExecuteMode, setPendingExecuteMode] = useState<'deploy' | 'run'>('deploy');
+  // 多环境部署相关状态
+  const [modalApps, setModalApps] = useState<main.ModalApp[]>([]);
+  const [selectedAppId, setSelectedAppId] = useState<string>('');
 
   useEffect(() => {
     loadProject();
@@ -192,13 +202,22 @@ export default function ProjectPanel() {
     const found = projects?.find((p: main.Project) => p.id === id);
     if (found) {
       setProject(found);
-      
+
+      // 加载所有 Modal Apps（用于环境选择）
+      const apps = await GetModalAppList();
+      setModalApps(apps || []);
+
       // 加载关联的 Modal App
       if (found.appId) {
         const app = await GetModalAppByID(found.appId);
         setModalApp(app);
+        // 设置默认选中的环境
+        setSelectedAppId(found.appId);
+      } else if (apps && apps.length > 0) {
+        // 如果项目没有关联的 App，默认选择第一个
+        setSelectedAppId(apps[0].id);
       }
-      
+
       const scriptList = await GetScripts(found.path);
       setScripts(scriptList || []);
       if (scriptList && scriptList.length > 0) {
@@ -223,83 +242,113 @@ export default function ProjectPanel() {
       /\.asgi_app\(/,
       /\.wsgi_app\(/,
     ];
-    
+
     for (const pattern of servicePatterns) {
       if (pattern.test(content)) {
         return 'deploy';
       }
     }
-    
+
     // 检测是否只有 local_entrypoint（一次性任务，用 run）
     if (/@app\.local_entrypoint|\.local_entrypoint\(/.test(content)) {
       return 'run';
     }
-    
+
     // 默认使用 deploy
     return 'deploy';
   };
 
   const handleExecute = async () => {
     if (isRunning || !project || !selectedScript) return;
-    
-    console.log('[Execute] 开始执行脚本:', {
-      projectId: project.id,
-      projectPath: project.path,
-      scriptName: selectedScript.name,
-      scriptPath: selectedScript.path,
-      scriptFullPath: selectedScript.fullPath
-    });
-    
+
     try {
-      // 读取脚本内容
+      // 读取脚本内容，检测执行模式
       const content = await ReadScriptContent(selectedScript.fullPath);
-      console.log('[Execute] 读取脚本内容成功, 长度:', content.length);
-      
-      // 自动判断执行模式
       const mode = detectExecuteMode(content);
       setExecuteMode(mode);
-      const actionLabel = mode === 'deploy' ? '部署' : '运行';
-      console.log(`[Execute] 自动检测执行模式: ${mode} (${actionLabel})`);
-      
+      setCurrentScriptContent(content);
+      setPendingExecuteMode(mode);
+
+      console.log('[Execute] 准备执行脚本:', {
+        scriptName: selectedScript.name,
+        mode,
+        targetAppId: selectedAppId
+      });
+
+      // 检查是否需要特殊对话框
       if (hasModalArgs(content)) {
         // 脚本包含 @modal-args 定义：弹出参数配置对话框
         console.log('[Execute] 检测到 @modal-args, 打开参数配置对话框');
-        setCurrentScriptContent(content);
         setShowArgsDialog(true);
       } else if (hasTemplateVariables(content)) {
         // 模板脚本：弹出变量表单
         console.log('[Execute] 检测到模板变量, 打开变量配置对话框');
-        setCurrentScriptContent(content);
         setShowVariableDialog(true);
       } else {
-        // 普通脚本：异步执行（不阻塞界面）
-        console.log(`[Execute] 普通脚本, 开始异步${actionLabel}`);
-        setOutput((prev) => [...prev, `${actionLabel}脚本: ${selectedScript.name}`]);
-        if (mode === 'deploy') {
-          DeployScriptAsync(selectedScript.path, project.path);
-        } else {
-          RunScriptAsync(selectedScript.path, project.path);
-        }
+        // 普通脚本：显示执行确认对话框
+        setShowExecuteConfirm(true);
       }
     } catch (err: any) {
-      console.error('[Execute] 执行失败:', err);
+      console.error('[Execute] 读取脚本失败:', err);
       const errorMessage = typeof err === 'string' ? err : (err.message || err.toString() || '未知错误');
       setOutput((prev) => [...prev, `✗ 读取脚本失败: ${errorMessage}`]);
     }
   };
-  
+
+  // 确认执行后调用
+  const confirmExecute = async () => {
+    if (!project || !selectedScript) return;
+
+    const selectedEnv = modalApps.find(app => app.id === selectedAppId);
+    const envLabel = selectedEnv ? ` → ${selectedEnv.name}${selectedEnv.suffix ? ` (${selectedEnv.suffix})` : ''}` : '';
+    const mode = pendingExecuteMode;
+    const actionLabel = mode === 'deploy' ? '部署' : '运行';
+
+    console.log('[Execute] 用户确认执行:', {
+      projectId: project.id,
+      scriptName: selectedScript.name,
+      mode,
+      targetAppId: selectedAppId,
+      targetEnv: selectedEnv?.name
+    });
+
+    if (selectedAppId && selectedEnv) {
+      // 使用指定环境部署
+      console.log(`[Execute] 使用指定环境${actionLabel}: 目标环境 = ${selectedEnv.name}, 后缀 = ${selectedEnv.suffix || '(无)'}`);
+      setOutput((prev) => [...prev, `${actionLabel}脚本${envLabel}: ${selectedScript.name}`]);
+      try {
+        if (mode === 'deploy') {
+          await DeployScriptToAppAsync(selectedScript.path, project.path, selectedAppId);
+        } else {
+          await RunScriptToAppAsync(selectedScript.path, project.path, selectedAppId);
+        }
+      } catch (err: any) {
+        setOutput((prev) => [...prev, `✗ ${actionLabel}失败: ${err.message || err}`]);
+      }
+    } else {
+      // 使用默认环境
+      console.log(`[Execute] 使用默认环境${actionLabel}`);
+      setOutput((prev) => [...prev, `${actionLabel}脚本${envLabel}: ${selectedScript.name}`]);
+      if (mode === 'deploy') {
+        DeployScriptAsync(selectedScript.path, project.path);
+      } else {
+        RunScriptAsync(selectedScript.path, project.path);
+      }
+    }
+  };
+
   // 处理带命令行参数的脚本执行
   const handleExecuteWithArgs = async (argsString: string) => {
     if (!project || !selectedScript) return;
-    
+
     console.log('[Deploy] 带参数脚本执行:', {
       scriptName: selectedScript.name,
       args: argsString
     });
-    
+
     setShowArgsDialog(false);
     setOutput((prev) => [...prev, `执行脚本: ${selectedScript.name} ${argsString}`]);
-    
+
     try {
       await RunScriptWithArgsAsync(selectedScript.path, project.path, argsString);
       console.log('[Deploy] 带参数脚本执行请求已发送');
@@ -313,23 +362,23 @@ export default function ProjectPanel() {
   // 处理模板脚本执行（变量已替换）
   const handleExecuteWithVariables = async (finalContent: string, filledVariables?: Record<string, string>) => {
     if (!project || !selectedScript) return;
-    
+
     const actionLabel = executeMode === 'deploy' ? '部署' : '运行';
     console.log(`[${executeMode}] 模板脚本变量已配置, 开始${actionLabel}:`, {
       scriptName: selectedScript.name,
       contentLength: finalContent.length,
       variables: filledVariables
     });
-    
+
     setShowVariableDialog(false);
     setOutput((prev) => [...prev, `${actionLabel}模板脚本: ${selectedScript.name}`]);
-    
+
     try {
       // 使用带日志的异步执行函数
       if (executeMode === 'deploy') {
         await DeployScriptWithLogAsync(
-          selectedScript.path, 
-          project.path, 
+          selectedScript.path,
+          project.path,
           finalContent,
           project.id,
           project.name,
@@ -338,8 +387,8 @@ export default function ProjectPanel() {
         );
       } else {
         await RunScriptWithLogAsync(
-          selectedScript.path, 
-          project.path, 
+          selectedScript.path,
+          project.path,
           finalContent,
           project.id,
           project.name,
@@ -366,14 +415,14 @@ export default function ProjectPanel() {
 
   const handleCreateScript = async (name: string, fileName: string, description: string, template: string) => {
     if (!project) return;
-    
+
     console.log('[ProjectPanel] 开始创建脚本:', {
       projectId: project.id,
       name,
       fileName,
       templateLength: template.length
     });
-    
+
     try {
       await CreateScript(project.id, name, fileName, description, template);
       console.log('[ProjectPanel] 脚本创建成功:', fileName);
@@ -390,23 +439,23 @@ export default function ProjectPanel() {
 
   const handleDeleteScript = async (deleteFile: boolean) => {
     if (!project || !scriptToDelete) return;
-    
+
     console.log('[ProjectPanel] 开始删除脚本:', {
       projectId: project.id,
       scriptPath: scriptToDelete.path,
       deleteFile
     });
-    
+
     try {
       await DeleteScript(project.id, scriptToDelete.path, deleteFile);
       console.log('[ProjectPanel] 脚本删除成功:', scriptToDelete.name);
       setOutput((prev) => [...prev, `✓ 脚本删除成功: ${scriptToDelete.name}`]);
-      
+
       // 如果删除的是当前选中的脚本，清空选中状态
       if (selectedScript?.path === scriptToDelete.path) {
         setSelectedScript(null);
       }
-      
+
       await loadProject();
     } catch (err: any) {
       console.error('[ProjectPanel] 脚本删除失败:', err);
@@ -419,7 +468,7 @@ export default function ProjectPanel() {
 
   const handleMoveScript = async (scriptPath: string, direction: string) => {
     if (!project) return;
-    
+
     try {
       await MoveScript(project.id, scriptPath, direction);
       await loadProject();
@@ -435,11 +484,11 @@ export default function ProjectPanel() {
 
   const handleShowCode = async () => {
     if (!selectedScript) return;
-    
+
     setShowCodePreview(true);
     setPreviewLoading(true);
     setPreviewCode('');
-    
+
     try {
       const code = await ReadScriptContent(selectedScript.fullPath);
       setPreviewCode(code);
@@ -575,7 +624,7 @@ export default function ProjectPanel() {
                     <File className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{script.name}</span>
                   </div>
-                  
+
                   {/* 操作按钮 */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {/* 向上移动 */}
@@ -596,7 +645,7 @@ export default function ProjectPanel() {
                     >
                       <ChevronUp className="w-3.5 h-3.5" />
                     </button>
-                    
+
                     {/* 向下移动 */}
                     <button
                       onClick={(e) => {
@@ -615,7 +664,7 @@ export default function ProjectPanel() {
                     >
                       <ChevronDown className="w-3.5 h-3.5" />
                     </button>
-                    
+
                     {/* 删除 */}
                     <button
                       onClick={(e) => {
@@ -669,21 +718,39 @@ export default function ProjectPanel() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  {/* 目标环境选择器 */}
+                  {modalApps.length > 0 && (
+                    <div className="flex items-center gap-2 mr-2">
+                      <span className="text-xs text-gray-500 whitespace-nowrap">🎯 目标:</span>
+                      <select
+                        value={selectedAppId}
+                        onChange={(e) => setSelectedAppId(e.target.value)}
+                        className="text-xs px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white min-w-[120px]"
+                      >
+                        <option value="">默认环境</option>
+                        {modalApps.map((app) => (
+                          <option key={app.id} value={app.id}>
+                            {app.name}{app.suffix ? ` (${app.suffix})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <Button size="sm" variant="success" onClick={handleExecute} disabled={isRunning}>
                     <Play className="w-3 h-3 mr-1" />
                     执行
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant="secondary" 
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={handleShowCode}
                   >
                     <Code className="w-3 h-3 mr-1" />
                     展示代码
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant="secondary" 
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => {
                       if (selectedScript && project) {
                         const encodedScriptPath = encodeURIComponent(selectedScript.path);
@@ -711,8 +778,8 @@ export default function ProjectPanel() {
                   onClick={() => setShowConsoleSearch(!showConsoleSearch)}
                   className={clsx(
                     "p-1 rounded transition-colors",
-                    showConsoleSearch 
-                      ? "text-primary-500 bg-primary-50" 
+                    showConsoleSearch
+                      ? "text-primary-500 bg-primary-50"
                       : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
                   )}
                   title="搜索控制台"
@@ -743,7 +810,7 @@ export default function ProjectPanel() {
                 </button>
               </div>
             </div>
-            
+
             {/* 控制台搜索栏 */}
             {showConsoleSearch && (
               <div className="flex items-center gap-2 mb-2 shrink-0">
@@ -771,7 +838,7 @@ export default function ProjectPanel() {
                 </button>
               </div>
             )}
-            
+
             <div
               ref={outputRef}
               className="flex-1 bg-gray-900 rounded-md p-3 overflow-y-auto font-mono text-xs min-h-0"
@@ -786,7 +853,7 @@ export default function ProjectPanel() {
                     const parts = line.split(regex);
                     return (
                       <div key={i} className="text-green-400 whitespace-pre-wrap bg-yellow-900/30">
-                        {parts.map((part, j) => 
+                        {parts.map((part, j) =>
                           regex.test(part) ? (
                             <span key={j} className="bg-yellow-500 text-black px-0.5 rounded">{part}</span>
                           ) : (
@@ -858,6 +925,18 @@ export default function ProjectPanel() {
             setScriptToDelete(null);
           }}
           onConfirm={handleDeleteScript}
+        />
+      )}
+
+      {/* Execute Confirm Dialog */}
+      {showExecuteConfirm && selectedScript && project && (
+        <ExecuteConfirmDialog
+          script={selectedScript}
+          project={project}
+          targetApp={modalApps.find(app => app.id === selectedAppId) || null}
+          executeMode={pendingExecuteMode}
+          onClose={() => setShowExecuteConfirm(false)}
+          onConfirm={confirmExecute}
         />
       )}
 
@@ -1045,14 +1124,14 @@ export default function ProjectPanel() {
                     onClick={() => {
                       const volumeName = window.prompt('请输入 Volume 名称:', project?.variables?.VOLUME_NAME || '');
                       if (!volumeName) return;
-                      
+
                       const localPath = window.prompt('请输入本地文件路径:', 'D:/models/model.safetensors');
                       if (!localPath) return;
-                      
+
                       const modelTypes = ['checkpoints', 'loras', 'vae', 'clip', 'text_encoders', 'diffusion_models', 'controlnet', 'upscale_models', 'embeddings'];
-                      const modelType = window.prompt(`请选择模型类型:\n${modelTypes.map((t, i) => `${i+1}. ${t}`).join('\n')}\n\n输入数字或类型名:`, 'loras');
+                      const modelType = window.prompt(`请选择模型类型:\n${modelTypes.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n输入数字或类型名:`, 'loras');
                       if (!modelType) return;
-                      
+
                       // 解析模型类型
                       let finalModelType = modelType;
                       const typeIndex = parseInt(modelType) - 1;
@@ -1063,11 +1142,11 @@ export default function ProjectPanel() {
                         alert('无效的模型类型');
                         return;
                       }
-                      
+
                       // 提取文件名
                       const filename = localPath.split(/[/\\]/).pop() || 'model.safetensors';
                       const remotePath = `/models/${finalModelType}/${filename}`;
-                      
+
                       if (window.confirm(`确认上传?\n\n本地: ${localPath}\n远程: ${volumeName}:${remotePath}`)) {
                         runOpsCommand(
                           () => ModalVolumePutWithTokenPair(volumeName, localPath, remotePath, modalApp.tokenId || '', modalApp.tokenSecret || ''),
@@ -1267,7 +1346,7 @@ export default function ProjectPanel() {
                         const matches = previewCode.match(regex);
                         const matchCount = matches ? matches.length : 0;
                         setSearchMatchCount(matchCount);
-                        
+
                         // 自动跳转到第一个匹配项
                         if (matchCount > 0) {
                           setCurrentMatchIndex(1);
@@ -1318,7 +1397,7 @@ export default function ProjectPanel() {
                             wholeWord: false,
                           });
                           view.dispatch({ effects: setSearchQuery.of(query) });
-                          
+
                           if (e.shiftKey) {
                             // Shift+Enter: 上一处
                             findPrevious(view);
@@ -1412,9 +1491,9 @@ export default function ProjectPanel() {
                       </span>
                     )}
                     <button
-                      onClick={() => { 
-                        setSearchKeyword(''); 
-                        setSearchMatchCount(0); 
+                      onClick={() => {
+                        setSearchKeyword('');
+                        setSearchMatchCount(0);
                         setCurrentMatchIndex(0);
                         // 清除高亮
                         const view = codePreviewRef.current?.view;

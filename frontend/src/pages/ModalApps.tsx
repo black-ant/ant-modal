@@ -29,6 +29,7 @@ export default function ModalApps() {
     tokenId: '',
     tokenSecret: '',
     workspace: '',
+    suffix: '',
   });
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function ModalApps() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', appName: '', description: '', token: '', tokenId: '', tokenSecret: '', workspace: '' });
+    setFormData({ name: '', appName: '', description: '', token: '', tokenId: '', tokenSecret: '', workspace: '', suffix: '' });
     setEditingApp(null);
     setTestResult(null);
   };
@@ -77,6 +78,7 @@ export default function ModalApps() {
       tokenId: app.tokenId || '',
       tokenSecret: app.tokenSecret || '',
       workspace: app.workspace,
+      suffix: app.suffix || '',
     });
     setShowModal(true);
   };
@@ -93,7 +95,8 @@ export default function ModalApps() {
         formData.token,
         formData.tokenId,
         formData.tokenSecret,
-        formData.workspace
+        formData.workspace,
+        formData.suffix
       );
     } else {
       await CreateModalApp(
@@ -103,7 +106,8 @@ export default function ModalApps() {
         formData.token,
         formData.tokenId,
         formData.tokenSecret,
-        formData.workspace
+        formData.workspace,
+        formData.suffix
       );
     }
 
@@ -186,6 +190,7 @@ export default function ModalApps() {
               <div className="text-xs text-gray-400 space-y-0.5 mb-2">
                 <p>应用名: <span className="text-gray-600">{app.appName}</span></p>
                 {app.workspace && <p>Workspace: <span className="text-gray-600">{app.workspace}</span></p>}
+                {app.suffix && <p>后缀: <span className="text-primary-600 font-medium">{app.suffix}</span></p>}
               </div>
               <div className="pt-2 border-t border-gray-100 flex justify-end">
                 <button
@@ -242,6 +247,17 @@ export default function ModalApps() {
                   onChange={(e) => setFormData({ ...formData, workspace: e.target.value })}
                   placeholder="Modal Workspace 名称"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">环境后缀</label>
+                <input
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  value={formData.suffix}
+                  onChange={(e) => setFormData({ ...formData, suffix: e.target.value })}
+                  placeholder="如: -test, -prod, -dev"
+                />
+                <p className="mt-1 text-xs text-gray-400">部署时会自动添加到应用名和 Volume 名称后面</p>
               </div>
 
               <div>

@@ -26,8 +26,8 @@ export function CreateExecutionLog(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['CreateExecutionLog'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
-export function CreateModalApp(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['CreateModalApp'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function CreateModalApp(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['CreateModalApp'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function CreateProject(arg1, arg2, arg3, arg4) {
@@ -68,6 +68,10 @@ export function DeployScript(arg1, arg2) {
 
 export function DeployScriptAsync(arg1, arg2) {
   return window['go']['main']['App']['DeployScriptAsync'](arg1, arg2);
+}
+
+export function DeployScriptToAppAsync(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeployScriptToAppAsync'](arg1, arg2, arg3);
 }
 
 export function DeployScriptWithContent(arg1, arg2, arg3) {
@@ -140,6 +144,18 @@ export function GetProjects() {
 
 export function GetScripts(arg1) {
   return window['go']['main']['App']['GetScripts'](arg1);
+}
+
+export function GetTemplateByCode(arg1) {
+  return window['go']['main']['App']['GetTemplateByCode'](arg1);
+}
+
+export function GetTemplateScripts(arg1) {
+  return window['go']['main']['App']['GetTemplateScripts'](arg1);
+}
+
+export function GetTemplates() {
+  return window['go']['main']['App']['GetTemplates']();
 }
 
 export function Log(arg1, arg2) {
@@ -310,6 +326,10 @@ export function ReadScriptContent(arg1) {
   return window['go']['main']['App']['ReadScriptContent'](arg1);
 }
 
+export function RegisterExistingScript(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RegisterExistingScript'](arg1, arg2, arg3, arg4);
+}
+
 export function ReorderScripts(arg1, arg2) {
   return window['go']['main']['App']['ReorderScripts'](arg1, arg2);
 }
@@ -344,6 +364,10 @@ export function RunScript(arg1, arg2) {
 
 export function RunScriptAsync(arg1, arg2) {
   return window['go']['main']['App']['RunScriptAsync'](arg1, arg2);
+}
+
+export function RunScriptToAppAsync(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunScriptToAppAsync'](arg1, arg2, arg3);
 }
 
 export function RunScriptWithArgsAsync(arg1, arg2, arg3) {
@@ -418,8 +442,8 @@ export function UpdateExecutionLog(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateExecutionLog'](arg1, arg2, arg3);
 }
 
-export function UpdateModalApp(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
-  return window['go']['main']['App']['UpdateModalApp'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+export function UpdateModalApp(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['UpdateModalApp'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
 export function UpdateProject(arg1, arg2, arg3, arg4) {

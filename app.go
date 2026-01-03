@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -39,22 +40,35 @@ type ModalApp struct {
 	TokenID     string    `json:"tokenId"`     // Modal Token ID
 	TokenSecret string    `json:"tokenSecret"` // Modal Token Secret
 	Workspace   string    `json:"workspace"`   // Modal Workspace
+	Suffix      string    `json:"suffix"`      // 应用名称后缀，用于多环境区分 (如 -test, -prod)
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+// Template 模板结构
+type Template struct {
+	Code        string   `json:"code"`        // 唯一标识 (如 "z-image-turbo")
+	Name        string   `json:"name"`        // 显示名称
+	Description string   `json:"description"` // 描述
+	Category    string   `json:"category"`    // 分类
+	Icon        string   `json:"icon"`        // 图标
+	Tags        []string `json:"tags"`        // 标签
+}
+
 // Project 项目结构
 type Project struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Path        string            `json:"path"`
-	Description string            `json:"description"`
-	AppID       string            `json:"appId"`     // 关联的 Modal App ID
-	Status      string            `json:"status"`    // running, stopped, deploying
-	Scripts     []Script          `json:"scripts"`   // 脚本列表
-	Variables   map[string]string `json:"variables"` // 项目级变量
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	Code         string            `json:"code"`         // 唯一标识代码 (用户可读，如 "my-project")
+	ID           string            `json:"id"`           // 兼容旧版ID (将逐步废弃)
+	Name         string            `json:"name"`         // 项目名称
+	Path         string            `json:"path"`         // 兼容旧版路径 (将通过 code 计算)
+	Description  string            `json:"description"`  // 描述
+	TemplateCode string            `json:"templateCode"` // 来源模板代码
+	AppID        string            `json:"appId"`        // 关联的 Modal App ID
+	Status       string            `json:"status"`       // running, stopped, deploying
+	Scripts      []Script          `json:"scripts"`      // 脚本列表
+	Variables    map[string]string `json:"variables"`    // 项目级变量
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
 }
 
 // Script Modal脚本
@@ -76,7 +90,8 @@ type CommandResult struct {
 // ExecutionLog 执行日志
 type ExecutionLog struct {
 	ID            string            `json:"id"`            // 唯一标识
-	ProjectID     string            `json:"projectId"`     // 项目 ID
+	ProjectID     string            `json:"projectId"`     // 项目 ID (兼容旧版，新项目使用 projectCode)
+	ProjectCode   string            `json:"projectCode"`   // 项目代码
 	ProjectName   string            `json:"projectName"`   // 项目名称
 	ScriptName    string            `json:"scriptName"`    // 脚本名称
 	ScriptPath    string            `json:"scriptPath"`    // 脚本路径
@@ -142,6 +157,83 @@ func (a *App) getProjectRelativePath(absolutePath string) string {
 	}
 	// 如果无法计算相对路径，尝试只保留最后一部分（项目ID或名称）
 	return filepath.Base(absolutePath)
+}
+
+// getProjectPathByCode 根据项目代码获取项目目录的绝对路径
+func (a *App) getProjectPathByCode(code string) string {
+	return filepath.Join(a.projectsDir, "projects", code)
+}
+
+// getTemplatesDir 获取模板目录的绝对路径
+func (a *App) getTemplatesDir() string {
+	return filepath.Join(a.projectsDir, "templates")
+}
+
+// GetTemplates 获取所有模板列表
+func (a *App) GetTemplates() ([]Template, error) {
+	templatesFile := filepath.Join(a.getTemplatesDir(), "templates.json")
+
+	data, err := os.ReadFile(templatesFile)
+	if err != nil {
+		a.LogError(fmt.Sprintf("读取模板索引文件失败: %v", err))
+		return nil, err
+	}
+
+	var result struct {
+		Version   string     `json:"version"`
+		Templates []Template `json:"templates"`
+	}
+
+	if err := json.Unmarshal(data, &result); err != nil {
+		a.LogError(fmt.Sprintf("解析模板索引文件失败: %v", err))
+		return nil, err
+	}
+
+	return result.Templates, nil
+}
+
+// GetTemplateByCode 根据代码获取模板
+func (a *App) GetTemplateByCode(code string) (*Template, error) {
+	templates, err := a.GetTemplates()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, t := range templates {
+		if t.Code == code {
+			return &t, nil
+		}
+	}
+
+	return nil, fmt.Errorf("模板不存在: %s", code)
+}
+
+// GetTemplateScripts 获取模板的脚本列表
+func (a *App) GetTemplateScripts(templateCode string) ([]Script, error) {
+	templateDir := filepath.Join(a.getTemplatesDir(), templateCode)
+
+	if _, err := os.Stat(templateDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("模板目录不存在: %s", templateCode)
+	}
+
+	var scripts []Script
+	files, err := os.ReadDir(templateDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".py") {
+			scripts = append(scripts, Script{
+				Name:     file.Name(),
+				Path:     file.Name(),
+				FullPath: filepath.Join(templateDir, file.Name()),
+				Order:    i,
+			})
+		}
+	}
+
+	return scripts, nil
 }
 
 // startup is called when the app starts
@@ -661,7 +753,7 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 
 // copyStableDiffusionTemplate 复制 Stable Diffusion 模板
 func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "stable-diffusion")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "stable-diffusion")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Stable Diffusion 模板: sourceDir=%s", sourceDir))
@@ -704,7 +796,7 @@ func (a *App) copyStableDiffusionTemplate(projectPath string) []Script {
 
 // copyAILLMTemplate 复制 AI 大模型模板
 func (a *App) copyAILLMTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "ai-llm")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "ai-llm")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 AI LLM 模板: sourceDir=%s", sourceDir))
@@ -750,7 +842,7 @@ func (a *App) copyAILLMTemplate(projectPath string) []Script {
 
 // copyWhisperSTTTemplate 复制 Whisper 语音识别模板
 func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "whisper-stt")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "whisper-stt")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Whisper STT 模板: sourceDir=%s", sourceDir))
@@ -793,7 +885,7 @@ func (a *App) copyWhisperSTTTemplate(projectPath string) []Script {
 
 // copyEmbeddingServiceTemplate 复制文本嵌入模板
 func (a *App) copyEmbeddingServiceTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "embedding-service")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "embedding-service")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Embedding 模板: sourceDir=%s", sourceDir))
@@ -836,7 +928,7 @@ func (a *App) copyEmbeddingServiceTemplate(projectPath string) []Script {
 
 // copyLoRATrainingTemplate 复制 LoRA 训练模板
 func (a *App) copyLoRATrainingTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "lora-training")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "lora-training")
 	return a.copySingleScript(sourceDir, projectPath, "lora_training.py", "LoRA 训练服务", "LoRA 模型训练和推理")
 }
 
@@ -870,7 +962,7 @@ func (a *App) copySingleScript(sourceDir, projectPath, fileName, name, desc stri
 
 // copyRedisServerTemplate 复制 Redis 服务器模板
 func (a *App) copyRedisServerTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "redis-server")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "redis-server")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Redis 服务器模板: sourceDir=%s", sourceDir))
@@ -913,7 +1005,7 @@ func (a *App) copyRedisServerTemplate(projectPath string) []Script {
 
 // copyComfyUINodeManagerTemplate 复制 ComfyUI 节点管理器模板
 func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "comfyui-node-manager")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "comfyui-node-manager")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 ComfyUI 节点管理器模板: sourceDir=%s", sourceDir))
@@ -959,7 +1051,7 @@ func (a *App) copyComfyUINodeManagerTemplate(projectPath string) []Script {
 
 // copyModalBasicsTemplate 复制 Modal 入门教程模板
 func (a *App) copyModalBasicsTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "modal-basics")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "modal-basics")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Modal 入门教程模板: sourceDir=%s", sourceDir))
@@ -1014,61 +1106,61 @@ func (a *App) copyModalBasicsTemplate(projectPath string) []Script {
 
 // copyPostgreSQLTemplate 复制 PostgreSQL 模板
 func (a *App) copyPostgreSQLTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "postgresql-server")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "postgresql-server")
 	return a.copySingleScript(sourceDir, projectPath, "postgres_service.py", "PostgreSQL 服务", "部署 PostgreSQL 数据库服务")
 }
 
 // copyMongoDBTemplate 复制 MongoDB 模板
 func (a *App) copyMongoDBTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "mongodb-server")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "mongodb-server")
 	return a.copySingleScript(sourceDir, projectPath, "mongodb_service.py", "MongoDB 服务", "部署 MongoDB 数据库服务")
 }
 
 // copyMinIOTemplate 复制 MinIO 模板
 func (a *App) copyMinIOTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "minio-storage")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "minio-storage")
 	return a.copySingleScript(sourceDir, projectPath, "minio_service.py", "MinIO 存储服务", "部署 MinIO 对象存储")
 }
 
 // copyImageClassificationTemplate 复制图像分类模板
 func (a *App) copyImageClassificationTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "image-classification")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "image-classification")
 	return a.copySingleScript(sourceDir, projectPath, "image_classifier.py", "图像分类服务", "使用 ViT 进行图像分类")
 }
 
 // copyOCRServiceTemplate 复制 OCR 模板
 func (a *App) copyOCRServiceTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "ocr-service")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "ocr-service")
 	return a.copySingleScript(sourceDir, projectPath, "ocr_service.py", "OCR 识别服务", "图片文字识别")
 }
 
 // copySentimentAnalysisTemplate 复制情感分析模板
 func (a *App) copySentimentAnalysisTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "sentiment-analysis")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "sentiment-analysis")
 	return a.copySingleScript(sourceDir, projectPath, "sentiment_service.py", "情感分析服务", "分析文本情感（正面/负面）")
 }
 
 // copyRabbitMQTemplate 复制 RabbitMQ 模板
 func (a *App) copyRabbitMQTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "rabbitmq-server")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "rabbitmq-server")
 	return a.copySingleScript(sourceDir, projectPath, "rabbitmq_service.py", "RabbitMQ 服务", "部署 RabbitMQ 消息队列")
 }
 
 // copyCeleryTasksTemplate 复制 Celery 模板
 func (a *App) copyCeleryTasksTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "celery-tasks")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "celery-tasks")
 	return a.copySingleScript(sourceDir, projectPath, "celery_service.py", "Celery 任务服务", "分布式任务处理")
 }
 
 // copyAPIGatewayTemplate 复制 API 网关模板
 func (a *App) copyAPIGatewayTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "api-gateway")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "api-gateway")
 	return a.copySingleScript(sourceDir, projectPath, "gateway_service.py", "API 网关服务", "统一 API 入口和流量控制")
 }
 
 // copyZImageTurboTemplate 复制 Z-Image-Turbo 模板
 func (a *App) copyZImageTurboTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "z-image-turbo")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "z-image-turbo")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Z-Image-Turbo 模板: sourceDir=%s", sourceDir))
@@ -1113,7 +1205,7 @@ func (a *App) copyZImageTurboTemplate(projectPath string) []Script {
 
 // copyWan21T2VTemplate 复制 Wan 2.1 T2V 模板
 func (a *App) copyWan21T2VTemplate(projectPath string) []Script {
-	sourceDir := filepath.Join(a.projectsDir, "projects", "wan21-t2v")
+	sourceDir := filepath.Join(a.projectsDir, "templates", "wan21-t2v")
 	scripts := []Script{}
 
 	a.LogInfo(fmt.Sprintf("[TemplateCopy] 复制 Wan 2.1 T2V 模板: sourceDir=%s", sourceDir))
@@ -1154,53 +1246,65 @@ func (a *App) copyWan21T2VTemplate(projectPath string) []Script {
 
 // GetScripts 获取项目中的所有Python脚本
 func (a *App) GetScripts(projectPath string) []Script {
-	// 首先尝试从 projects.json 读取脚本配置
+	// 计算项目的绝对路径
+	projectAbsPath := a.getProjectAbsolutePath(projectPath)
+	a.LogInfo(fmt.Sprintf("[GetScripts] projectPath=%s, projectAbsPath=%s", projectPath, projectAbsPath))
+
+	// 首先从 projects.json 读取已配置的脚本
 	projects := a.GetProjects()
-	for _, project := range projects {
-		if project.Path == projectPath {
-			// 找到对应的项目，检查是否有 scripts 配置
-			if len(project.Scripts) > 0 {
-				// 计算项目的绝对路径
-				projectAbsPath := a.getProjectAbsolutePath(project.Path)
-				// 验证文件是否存在，动态计算 FullPath
-				validScripts := []Script{}
-				for i, script := range project.Scripts {
-					fullPath := filepath.Join(projectAbsPath, script.Path)
-					if _, err := os.Stat(fullPath); err == nil {
-						script.FullPath = fullPath // 动态计算绝对路径
-						script.Order = i           // 使用数组索引作为顺序
-						validScripts = append(validScripts, script)
-					}
-				}
-				return validScripts
-			}
+	var configuredScripts []Script
+	for i := range projects {
+		if projects[i].Path == projectPath {
+			configuredScripts = projects[i].Scripts
+			a.LogInfo(fmt.Sprintf("[GetScripts] 找到项目配置, 已配置脚本数量=%d", len(configuredScripts)))
 			break
 		}
 	}
 
-	// 计算项目的绝对路径（用于文件系统扫描）
-	projectAbsPath := a.getProjectAbsolutePath(projectPath)
+	// 创建已配置脚本的路径集合（用于去重）
+	configuredPaths := make(map[string]bool)
+	for _, script := range configuredScripts {
+		configuredPaths[script.Path] = true
+	}
 
-	// 如果没有配置或配置为空，回退到扫描文件系统
-	scripts := []Script{}
+	// 验证已配置的脚本，动态计算 FullPath
+	validScripts := []Script{}
+	for i, script := range configuredScripts {
+		fullPath := filepath.Join(projectAbsPath, script.Path)
+		if _, err := os.Stat(fullPath); err == nil {
+			script.FullPath = fullPath
+			script.Order = i
+			validScripts = append(validScripts, script)
+		}
+	}
+	a.LogInfo(fmt.Sprintf("[GetScripts] 已配置的有效脚本数量=%d", len(validScripts)))
+
+	// 扫描文件系统，查找未配置的新脚本
+	newScriptsCount := 0
 	filepath.Walk(projectAbsPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
 		if !info.IsDir() && strings.HasSuffix(info.Name(), ".py") {
 			relPath, _ := filepath.Rel(projectAbsPath, path)
-			scripts = append(scripts, Script{
-				Name:        info.Name(),
-				Path:        relPath,
-				FullPath:    path, // 动态计算的绝对路径
-				Description: "",
-				Order:       len(scripts),
-			})
+			// 只添加未配置的脚本
+			if !configuredPaths[relPath] {
+				a.LogInfo(fmt.Sprintf("[GetScripts] 发现新脚本: %s", relPath))
+				newScriptsCount++
+				validScripts = append(validScripts, Script{
+					Name:        info.Name(),
+					Path:        relPath,
+					FullPath:    path,
+					Description: "",
+					Order:       len(validScripts),
+				})
+			}
 		}
 		return nil
 	})
+	a.LogInfo(fmt.Sprintf("[GetScripts] 新发现的脚本数量=%d, 总脚本数量=%d", newScriptsCount, len(validScripts)))
 
-	return scripts
+	return validScripts
 }
 
 // RunModalCommand 执行Modal命令
@@ -1503,6 +1607,140 @@ func (a *App) DeployScriptAsync(scriptPath string, workDir string) {
 	a.RunModalCommandAsync("deploy", []string{scriptPath}, workDir, tokenId, tokenSecret)
 }
 
+// modifyScriptForEnvironment 修改脚本中的应用名称和 Volume 名称，添加环境后缀
+func (a *App) modifyScriptForEnvironment(content string, suffix string) string {
+	if suffix == "" {
+		return content
+	}
+
+	// 确保后缀以 - 开头
+	if !strings.HasPrefix(suffix, "-") {
+		suffix = "-" + suffix
+	}
+
+	// 匹配 modal.App(name="xxx") 或 modal.App("xxx") 格式
+	// 支持: modal.App(name="app-name") 和 modal.App("app-name")
+	appNamePattern := regexp.MustCompile(`(modal\.App\s*\(\s*(?:name\s*=\s*)?["'])([^"']+)(["'])`)
+	content = appNamePattern.ReplaceAllStringFunc(content, func(match string) string {
+		submatches := appNamePattern.FindStringSubmatch(match)
+		if len(submatches) == 4 {
+			appName := submatches[2]
+			// 避免重复添加后缀
+			if !strings.HasSuffix(appName, suffix) {
+				return submatches[1] + appName + suffix + submatches[3]
+			}
+		}
+		return match
+	})
+
+	// 匹配 modal.Volume.from_name("xxx") 格式
+	volumePattern := regexp.MustCompile(`(modal\.Volume\.from_name\s*\(\s*["'])([^"']+)(["'])`)
+	content = volumePattern.ReplaceAllStringFunc(content, func(match string) string {
+		submatches := volumePattern.FindStringSubmatch(match)
+		if len(submatches) == 4 {
+			volumeName := submatches[2]
+			// 避免重复添加后缀
+			if !strings.HasSuffix(volumeName, suffix) {
+				return submatches[1] + volumeName + suffix + submatches[3]
+			}
+		}
+		return match
+	})
+
+	// 匹配 modal.Secret.from_name("xxx") 格式
+	secretPattern := regexp.MustCompile(`(modal\.Secret\.from_name\s*\(\s*["'])([^"']+)(["'])`)
+	content = secretPattern.ReplaceAllStringFunc(content, func(match string) string {
+		submatches := secretPattern.FindStringSubmatch(match)
+		if len(submatches) == 4 {
+			secretName := submatches[2]
+			// 避免重复添加后缀
+			if !strings.HasSuffix(secretName, suffix) {
+				return submatches[1] + secretName + suffix + submatches[3]
+			}
+		}
+		return match
+	})
+
+	return content
+}
+
+// DeployScriptToAppAsync 异步部署脚本到指定的 Modal App 环境
+func (a *App) DeployScriptToAppAsync(scriptPath string, workDir string, appId string) error {
+	a.LogInfo(fmt.Sprintf("[DeployToApp] 部署脚本到环境: scriptPath=%s, appId=%s", scriptPath, appId))
+
+	// 获取指定的 Modal App
+	modalApp := a.GetModalAppByID(appId)
+	if modalApp == nil {
+		return fmt.Errorf("未找到 Modal App: %s", appId)
+	}
+
+	// 读取脚本内容
+	workDirAbs := a.getProjectAbsolutePath(workDir)
+	scriptFullPath := filepath.Join(workDirAbs, scriptPath)
+	content, err := os.ReadFile(scriptFullPath)
+	if err != nil {
+		return fmt.Errorf("读取脚本失败: %v", err)
+	}
+
+	// 修改脚本中的应用名称
+	modifiedContent := a.modifyScriptForEnvironment(string(content), modalApp.Suffix)
+
+	// 创建临时文件
+	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
+	if err := os.WriteFile(tempFile, []byte(modifiedContent), 0644); err != nil {
+		return fmt.Errorf("创建临时文件失败: %v", err)
+	}
+
+	a.LogInfo(fmt.Sprintf("[DeployToApp] 使用环境: name=%s, suffix=%s, tokenId=%s...",
+		modalApp.Name, modalApp.Suffix, modalApp.TokenID[:min(8, len(modalApp.TokenID))]))
+
+	// 使用指定环境的 Token 执行部署
+	go func() {
+		a.RunModalCommandAsync("deploy", []string{filepath.Base(tempFile)}, workDir, modalApp.TokenID, modalApp.TokenSecret)
+		// 注意：临时文件会在下次部署时被覆盖
+	}()
+
+	return nil
+}
+
+// RunScriptToAppAsync 异步运行脚本到指定的 Modal App 环境
+func (a *App) RunScriptToAppAsync(scriptPath string, workDir string, appId string) error {
+	a.LogInfo(fmt.Sprintf("[RunToApp] 运行脚本到环境: scriptPath=%s, appId=%s", scriptPath, appId))
+
+	// 获取指定的 Modal App
+	modalApp := a.GetModalAppByID(appId)
+	if modalApp == nil {
+		return fmt.Errorf("未找到 Modal App: %s", appId)
+	}
+
+	// 读取脚本内容
+	workDirAbs := a.getProjectAbsolutePath(workDir)
+	scriptFullPath := filepath.Join(workDirAbs, scriptPath)
+	content, err := os.ReadFile(scriptFullPath)
+	if err != nil {
+		return fmt.Errorf("读取脚本失败: %v", err)
+	}
+
+	// 修改脚本中的应用名称
+	modifiedContent := a.modifyScriptForEnvironment(string(content), modalApp.Suffix)
+
+	// 创建临时文件
+	tempFile := filepath.Join(workDirAbs, "_temp_"+filepath.Base(scriptPath))
+	if err := os.WriteFile(tempFile, []byte(modifiedContent), 0644); err != nil {
+		return fmt.Errorf("创建临时文件失败: %v", err)
+	}
+
+	a.LogInfo(fmt.Sprintf("[RunToApp] 使用环境: name=%s, suffix=%s, tokenId=%s...",
+		modalApp.Name, modalApp.Suffix, modalApp.TokenID[:min(8, len(modalApp.TokenID))]))
+
+	// 使用指定环境的 Token 执行运行
+	go func() {
+		a.RunModalCommandAsync("run", []string{filepath.Base(tempFile)}, workDir, modalApp.TokenID, modalApp.TokenSecret)
+	}()
+
+	return nil
+}
+
 // RunScriptWithArgsAsync 异步运行脚本（带命令行参数）
 func (a *App) RunScriptWithArgsAsync(scriptPath string, workDir string, argsString string) {
 	tokenId, tokenSecret := a.getTokenForProjectPath(workDir)
@@ -1782,8 +2020,8 @@ func (a *App) SaveModalAppList(apps []ModalApp) error {
 }
 
 // CreateModalApp 创建新的Modal应用配置
-func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSecret, workspace string) (*ModalApp, error) {
-	a.LogInfo(fmt.Sprintf("[ModalApp] 开始创建应用配置: name=%s, appName=%s, workspace=%s", name, appName, workspace))
+func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSecret, workspace, suffix string) (*ModalApp, error) {
+	a.LogInfo(fmt.Sprintf("[ModalApp] 开始创建应用配置: name=%s, appName=%s, workspace=%s, suffix=%s", name, appName, workspace, suffix))
 
 	apps := a.GetModalAppList()
 
@@ -1796,6 +2034,7 @@ func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSe
 		TokenID:     tokenId,
 		TokenSecret: tokenSecret,
 		Workspace:   workspace,
+		Suffix:      suffix,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -1811,8 +2050,8 @@ func (a *App) CreateModalApp(name, appName, description, token, tokenId, tokenSe
 }
 
 // UpdateModalApp 更新Modal应用配置
-func (a *App) UpdateModalApp(id, name, appName, description, token, tokenId, tokenSecret, workspace string) error {
-	a.LogInfo(fmt.Sprintf("[ModalApp] 开始更新应用配置: id=%s, name=%s", id, name))
+func (a *App) UpdateModalApp(id, name, appName, description, token, tokenId, tokenSecret, workspace, suffix string) error {
+	a.LogInfo(fmt.Sprintf("[ModalApp] 开始更新应用配置: id=%s, name=%s, suffix=%s", id, name, suffix))
 
 	apps := a.GetModalAppList()
 	found := false
@@ -1826,6 +2065,7 @@ func (a *App) UpdateModalApp(id, name, appName, description, token, tokenId, tok
 			apps[i].TokenID = tokenId
 			apps[i].TokenSecret = tokenSecret
 			apps[i].Workspace = workspace
+			apps[i].Suffix = suffix
 			apps[i].UpdatedAt = time.Now()
 			found = true
 			break
@@ -2291,6 +2531,72 @@ func (a *App) CreateScript(projectID, name, fileName, description, template stri
 	}
 
 	a.LogInfo(fmt.Sprintf("[CreateScript] 脚本创建成功: %s/%s", project.Name, fileName))
+	return nil
+}
+
+// RegisterExistingScript 注册已存在的脚本文件到项目配置
+func (a *App) RegisterExistingScript(projectID, fileName, name, description string) error {
+	a.LogInfo(fmt.Sprintf("[RegisterScript] 注册现有脚本: projectId=%s, fileName=%s", projectID, fileName))
+
+	projects := a.GetProjects()
+
+	// 找到对应的项目
+	projectIndex := -1
+	var project *Project
+	for i := range projects {
+		if projects[i].ID == projectID {
+			projectIndex = i
+			project = &projects[i]
+			break
+		}
+	}
+
+	if project == nil {
+		a.LogError(fmt.Sprintf("[RegisterScript] 注册失败: 项目不存在, projectId=%s", projectID))
+		return fmt.Errorf("项目不存在")
+	}
+
+	// 计算项目绝对路径
+	projectAbsPath := a.getProjectAbsolutePath(project.Path)
+	scriptAbsPath := filepath.Join(projectAbsPath, fileName)
+
+	// 检查文件是否存在
+	if _, err := os.Stat(scriptAbsPath); os.IsNotExist(err) {
+		a.LogError(fmt.Sprintf("[RegisterScript] 注册失败: 文件不存在, path=%s", scriptAbsPath))
+		return fmt.Errorf("文件不存在: %s", fileName)
+	}
+
+	// 检查是否已经注册
+	for _, script := range project.Scripts {
+		if script.Path == fileName {
+			a.LogInfo(fmt.Sprintf("[RegisterScript] 脚本已存在于列表中: %s", fileName))
+			return nil // 已存在，不需要重复注册
+		}
+	}
+
+	// 如果没有提供名称，使用文件名
+	if name == "" {
+		name = strings.TrimSuffix(fileName, ".py")
+	}
+
+	// 添加到项目配置
+	newScript := Script{
+		Name:        name,
+		Path:        fileName,
+		FullPath:    "", // 运行时动态计算
+		Description: description,
+		Order:       len(project.Scripts),
+	}
+
+	projects[projectIndex].Scripts = append(projects[projectIndex].Scripts, newScript)
+	projects[projectIndex].UpdatedAt = time.Now()
+
+	if err := a.SaveProjects(projects); err != nil {
+		a.LogError(fmt.Sprintf("[RegisterScript] 保存项目配置失败: %v", err))
+		return err
+	}
+
+	a.LogInfo(fmt.Sprintf("[RegisterScript] 脚本注册成功: %s/%s", project.Name, fileName))
 	return nil
 }
 

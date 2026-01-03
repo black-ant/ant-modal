@@ -14,7 +14,7 @@ export function CreateAIConfig(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function CreateExecutionLog(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:Record<string, string>):Promise<string>;
 
-export function CreateModalApp(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<main.ModalApp>;
+export function CreateModalApp(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<main.ModalApp>;
 
 export function CreateProject(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.Project>;
 
@@ -35,6 +35,8 @@ export function DeleteScript(arg1:string,arg2:string,arg3:boolean):Promise<void>
 export function DeployScript(arg1:string,arg2:string):Promise<main.CommandResult>;
 
 export function DeployScriptAsync(arg1:string,arg2:string):Promise<void>;
+
+export function DeployScriptToAppAsync(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DeployScriptWithContent(arg1:string,arg2:string,arg3:string):Promise<main.CommandResult>;
 
@@ -71,6 +73,12 @@ export function GetProjectVariables(arg1:string):Promise<Record<string, string>>
 export function GetProjects():Promise<Array<main.Project>>;
 
 export function GetScripts(arg1:string):Promise<Array<main.Script>>;
+
+export function GetTemplateByCode(arg1:string):Promise<main.Template>;
+
+export function GetTemplateScripts(arg1:string):Promise<Array<main.Script>>;
+
+export function GetTemplates():Promise<Array<main.Template>>;
 
 export function Log(arg1:main.LogType,arg2:string):Promise<void>;
 
@@ -156,6 +164,8 @@ export function OpenInIDE(arg1:string,arg2:string):Promise<void>;
 
 export function ReadScriptContent(arg1:string):Promise<string>;
 
+export function RegisterExistingScript(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function ReorderScripts(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function RunModalCommand(arg1:string,arg2:Array<string>,arg3:string):Promise<main.CommandResult>;
@@ -173,6 +183,8 @@ export function RunModalCommandWithTokenPair(arg1:string,arg2:Array<string>,arg3
 export function RunScript(arg1:string,arg2:string):Promise<main.CommandResult>;
 
 export function RunScriptAsync(arg1:string,arg2:string):Promise<void>;
+
+export function RunScriptToAppAsync(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RunScriptWithArgsAsync(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -210,7 +222,7 @@ export function UpdateAIConfig(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function UpdateExecutionLog(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function UpdateModalApp(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
+export function UpdateModalApp(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<void>;
 
 export function UpdateProject(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 

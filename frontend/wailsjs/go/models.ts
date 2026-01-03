@@ -71,6 +71,7 @@ export namespace main {
 	export class ExecutionLog {
 	    id: string;
 	    projectId: string;
+	    projectCode: string;
 	    projectName: string;
 	    scriptName: string;
 	    scriptPath: string;
@@ -90,6 +91,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.projectId = source["projectId"];
+	        this.projectCode = source["projectCode"];
 	        this.projectName = source["projectName"];
 	        this.scriptName = source["scriptName"];
 	        this.scriptPath = source["scriptPath"];
@@ -133,6 +135,7 @@ export namespace main {
 	    tokenId: string;
 	    tokenSecret: string;
 	    workspace: string;
+	    suffix: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -152,6 +155,7 @@ export namespace main {
 	        this.tokenId = source["tokenId"];
 	        this.tokenSecret = source["tokenSecret"];
 	        this.workspace = source["workspace"];
+	        this.suffix = source["suffix"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -195,10 +199,12 @@ export namespace main {
 	    }
 	}
 	export class Project {
+	    code: string;
 	    id: string;
 	    name: string;
 	    path: string;
 	    description: string;
+	    templateCode: string;
 	    appId: string;
 	    status: string;
 	    scripts: Script[];
@@ -214,10 +220,12 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.path = source["path"];
 	        this.description = source["description"];
+	        this.templateCode = source["templateCode"];
 	        this.appId = source["appId"];
 	        this.status = source["status"];
 	        this.scripts = this.convertValues(source["scripts"], Script);
@@ -243,6 +251,29 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	
+	export class Template {
+	    code: string;
+	    name: string;
+	    description: string;
+	    category: string;
+	    icon: string;
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Template(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.category = source["category"];
+	        this.icon = source["icon"];
+	        this.tags = source["tags"];
+	    }
 	}
 
 }

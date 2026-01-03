@@ -1,7 +1,9 @@
 # =============================================================================
-# Z-Image-Turbo ComfyUI 一键部署服务
+# Z-Image-Turbo ComfyUI 一键部署服务 (快速版)
 # =============================================================================
 # 启动命令: modal deploy z_image_turbo_deploy.py
+# UI 端口: 8000
+# GPU: L40S (48GB)
 # =============================================================================
 
 import json
@@ -41,33 +43,45 @@ def hf_download():
     - z_image_turbo_bf16.safetensors (主扩散模型)
     - qwen_3_4b.safetensors (CLIP 文本编码器)
     - ae.safetensors (VAE 解码器)
+    - pixel_art_style_z_image_turbo.safetensors (Pixel Art LoRA)
     """
     from huggingface_hub import hf_hub_download
 
     hf_token = os.getenv("HF_TOKEN")
-    repo_id = "Comfy-Org/z_image_turbo"
     
-    print(f"📦 从 {repo_id} 下载模型...")
+    print("📦 下载模型...")
 
-    # 模型配置列表 (文件路径包含 split_files/ 前缀)
+    # 模型配置列表
     models = [
+        # 从 Comfy-Org/z_image_turbo 下载的核心模型
         {
+            "repo_id": "Comfy-Org/z_image_turbo",
             "filename": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
             "target_dir": "/root/comfy/ComfyUI/models/diffusion_models",
             "target_name": "z_image_turbo_bf16.safetensors",
             "desc": "主扩散模型"
         },
         {
+            "repo_id": "Comfy-Org/z_image_turbo",
             "filename": "split_files/text_encoders/qwen_3_4b.safetensors",
             "target_dir": "/root/comfy/ComfyUI/models/clip",
             "target_name": "qwen_3_4b.safetensors",
             "desc": "CLIP 文本编码器"
         },
         {
+            "repo_id": "Comfy-Org/z_image_turbo",
             "filename": "split_files/vae/ae.safetensors",
             "target_dir": "/root/comfy/ComfyUI/models/vae",
             "target_name": "ae.safetensors",
             "desc": "VAE 解码器"
+        },
+        # LoRA 模型 (来自不同仓库)
+        {
+            "repo_id": "tarn59/pixel_art_style_lora_z_image_turbo",
+            "filename": "pixel_art_style_z_image_turbo.safetensors",
+            "target_dir": "/root/comfy/ComfyUI/models/loras",
+            "target_name": "pixel_art_style_z_image_turbo.safetensors",
+            "desc": "Pixel Art LoRA"
         }
     ]
 
@@ -75,7 +89,7 @@ def hf_download():
         print(f"📥 下载 {model['desc']}: {model['target_name']}...")
         
         cached_path = hf_hub_download(
-            repo_id=repo_id,
+            repo_id=model["repo_id"],
             filename=model["filename"],
             cache_dir="/cache",
             token=hf_token
@@ -161,7 +175,7 @@ def create_workflow_file():
 # =============================================================================
 # S3: 服务配置
 # =============================================================================
-vol = modal.Volume.from_name("z-image-turbo-test-cache", create_if_missing=True)
+vol = modal.Volume.from_name("z-image-turbo-cache", create_if_missing=True)
 
 image = (
     image.pip_install("huggingface_hub[hf_transfer]==0.34.4")
@@ -174,7 +188,7 @@ image = (
     .run_function(create_workflow_file)
 )
 
-app = modal.App(name="z-image-turbo-test", image=image)
+app = modal.App(name="z-image-turbo", image=image)
 
 
 # =============================================================================
@@ -184,13 +198,14 @@ app = modal.App(name="z-image-turbo-test", image=image)
     max_containers=1,
     gpu="L40S",
     volumes={"/cache": vol},
-    timeout=86400
+    timeout=86400,
+    container_idle_timeout=600,
 )
 @modal.concurrent(max_inputs=10)
 @modal.web_server(8000, startup_timeout=60)
 def ui():
-    """ComfyUI Web 界面"""
-    print("🌐 启动 Z-Image-Turbo Web 界面...")
+    """ComfyUI Web 界面 - Z-Image-Turbo"""
+    print("🌐 启动 Z-Image-Turbo Web 界面 (端口: 8000)...")
     subprocess.Popen("comfy launch -- --listen 0.0.0.0 --port 8000", shell=True)
 
 
@@ -200,12 +215,21 @@ def ui():
 @app.local_entrypoint()
 def main():
     print("=" * 60)
-    print("Z-Image-Turbo ComfyUI 一键部署")
+    print("🖼️ Z-Image-Turbo ComfyUI 一键部署 (快速版)")
     print("=" * 60)
-    print("\n📦 模型来源: Comfy-Org/z_image_turbo")
+    print("\n📦 模型来源:")
+    print("   - Comfy-Org/z_image_turbo")
+    print("   - tarn59/pixel_art_style_lora_z_image_turbo")
     print("\n📋 已下载模型:")
     print("   - z_image_turbo_bf16.safetensors (主扩散模型)")
     print("   - qwen_3_4b.safetensors (CLIP 文本编码器)")
     print("   - ae.safetensors (VAE 解码器)")
+    print("   - pixel_art_style_z_image_turbo.safetensors (Pixel Art LoRA)")
+    print("\n🔧 配置:")
+    print("   - GPU: L40S (48GB)")
+    print("   - 采样步数: 4 步 (极速生成)")
+    print("   - 分辨率: 1024x1024")
     print("\n📌 部署命令: modal deploy z_image_turbo_deploy.py")
     print("=" * 60)
+
+

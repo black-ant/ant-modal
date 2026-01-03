@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "templates": [
+    {"code":"z-image-turbo","name":"Z-Image-Turbo","description":"Z-Image-Turbo image generation","category":"Image","icon":"sparkles","tags":["Z-Image","ComfyUI","L40S"]},
+    {"code":"stable-diffusion","name":"Stable Diffusion","description":"SDXL image generation","category":"Image","icon":"sparkles","tags":["SDXL","GPU"]},
+    {"code":"comfyui-node-manager","name":"ComfyUI Manager","description":"ComfyUI deployment and management","category":"Image","icon":"sparkles","tags":["ComfyUI","Flux"]},
+    {"code":"ai-llm","name":"AI LLM Service","description":"LLM deployment","category":"AI","icon":"sparkles","tags":["LLM","Llama"]},
+    {"code":"whisper-stt","name":"Whisper STT","description":"Speech to text","category":"AI","icon":"sparkles","tags":["Whisper","STT"]},
+    {"code":"embedding-service","name":"Embedding Service","description":"Text embedding","category":"AI","icon":"sparkles","tags":["Embedding"]},
+    {"code":"wan21-t2v","name":"Wan 2.1 T2V","description":"Text to video","category":"Video","icon":"sparkles","tags":["Wan2.1","T2V"]},
+    {"code":"comfy-video-gen","name":"ComfyUI Video Gen","description":"Video generation","category":"Video","icon":"sparkles","tags":["ComfyUI","Video"]},
+    {"code":"modal-basics","name":"Modal Basics","description":"Modal examples","category":"Basics","icon":"box","tags":["Modal"]},
+    {"code":"redis-server","name":"Redis Server","description":"Redis deployment","category":"Database","icon":"database","tags":["Redis"]},
+    {"code":"postgresql-server","name":"PostgreSQL Server","description":"PostgreSQL deployment","category":"Database","icon":"database","tags":["PostgreSQL"]}
+  ]
+}
