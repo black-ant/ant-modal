@@ -1,0 +1,222 @@
+{
+  "workflow": {
+    "1": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "svd_xt.safetensors"
+      },
+      "_meta": {
+        "title": "加载 SVD-XT 模型"
+      }
+    },
+    "2": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "input.png"
+      },
+      "_meta": {
+        "title": "加载输入图片"
+      }
+    },
+    "3": {
+      "class_type": "SVD_img2vid_Conditioning",
+      "inputs": {
+        "width": 1024,
+        "height": 576,
+        "video_frames": 25,
+        "motion_bucket_id": 127,
+        "fps": 6,
+        "augmentation_level": 0,
+        "clip_vision": ["1", 1],
+        "init_image": ["2", 0],
+        "vae": ["1", 2]
+      },
+      "_meta": {
+        "title": "SVD 条件编码",
+        "description": "设置视频参数：分辨率、帧数、运动幅度"
+      }
+    },
+    "4": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": 42,
+        "steps": 20,
+        "cfg": 2.5,
+        "sampler_name": "euler",
+        "scheduler": "karras",
+        "denoise": 1.0,
+        "model": ["1", 0],
+        "positive": ["3", 0],
+        "negative": ["3", 1],
+        "latent_image": ["3", 2]
+      },
+      "_meta": {
+        "title": "采样器",
+        "description": "生成视频潜在表示"
+      }
+    },
+    "5": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["4", 0],
+        "vae": ["1", 2]
+      },
+      "_meta": {
+        "title": "VAE 解码",
+        "description": "将潜在表示解码为图像帧"
+      }
+    },
+    "6": {
+      "class_type": "VHS_VideoCombine",
+      "inputs": {
+        "frame_rate": 6,
+        "loop_count": 0,
+        "filename_prefix": "svd_output",
+        "format": "video/h264-mp4",
+        "pingpong": false,
+        "save_output": true,
+        "images": ["5", 0]
+      },
+      "_meta": {
+        "title": "视频合成",
+        "description": "将图像帧合成为 MP4 视频"
+      }
+    }
+  },
+  "parameters": {
+    "model": {
+      "name": "svd_xt.safetensors",
+      "description": "SVD-XT 扩展版，生成 25 帧视频",
+      "alternatives": ["svd.safetensors (14 帧标准版)"]
+    },
+    "resolution": {
+      "width": 1024,
+      "height": 576,
+      "description": "输出分辨率，横屏格式",
+      "alternatives": ["576x1024 (竖屏)", "512x512 (方形)"]
+    },
+    "video_frames": {
+      "value": 25,
+      "description": "视频帧数 (SVD-XT)",
+      "alternatives": [14, 25]
+    },
+    "motion_bucket_id": {
+      "value": 127,
+      "range": [1, 255],
+      "description": "运动幅度控制",
+      "presets": {
+        "静态": 30,
+        "微动": 80,
+        "适中": 127,
+        "动态": 180,
+        "剧烈": 230
+      }
+    },
+    "fps": {
+      "value": 6,
+      "description": "帧率 (固定 6fps)",
+      "note": "SVD 模型训练时使用 6fps"
+    },
+    "augmentation_level": {
+      "value": 0,
+      "range": [0, 1],
+      "description": "数据增强级别",
+      "recommendation": "保持 0 以获得最佳质量"
+    },
+    "steps": {
+      "value": 20,
+      "range": [10, 50],
+      "description": "采样步数",
+      "presets": {
+        "快速": 15,
+        "标准": 20,
+        "高质量": 25,
+        "极致": 30
+      }
+    },
+    "cfg": {
+      "value": 2.5,
+      "range": [1.0, 5.0],
+      "description": "CFG Scale (引导强度)",
+      "presets": {
+        "自然": 2.0,
+        "标准": 2.5,
+        "强引导": 3.0
+      }
+    },
+    "sampler_name": {
+      "value": "euler",
+      "description": "采样器类型",
+      "alternatives": ["euler_ancestral", "dpmpp_2m", "dpmpp_sde"]
+    },
+    "scheduler": {
+      "value": "karras",
+      "description": "调度器类型",
+      "alternatives": ["normal", "simple", "ddim_uniform"]
+    }
+  },
+  "tips": {
+    "input_image": [
+      "使用清晰、主体明确的图片",
+      "推荐分辨率: 1024x576 或 576x1024",
+      "避免过于复杂的场景",
+      "确保图片对比度适中"
+    ],
+    "motion_control": [
+      "静态场景: motion_bucket_id = 30-50",
+      "人物肖像: motion_bucket_id = 80-120",
+      "动态场景: motion_bucket_id = 150-200",
+      "过高的值可能导致不稳定"
+    ],
+    "quality_optimization": [
+      "增加采样步数到 25-30",
+      "使用 SVD-XT 而非 SVD",
+      "保持 augmentation_level = 0",
+      "CFG Scale 保持在 2.0-3.0"
+    ],
+    "performance": [
+      "SVD 标准版更快，显存占用更少",
+      "降低分辨率可以减少显存使用",
+      "A100 GPU 推荐用于生产环境",
+      "批量生成可以提高效率"
+    ]
+  },
+  "examples": {
+    "portrait_animation": {
+      "description": "人物肖像动画",
+      "parameters": {
+        "motion_bucket_id": 100,
+        "steps": 25,
+        "cfg": 2.5,
+        "video_frames": 25
+      }
+    },
+    "product_showcase": {
+      "description": "产品展示视频",
+      "parameters": {
+        "motion_bucket_id": 150,
+        "steps": 20,
+        "cfg": 2.0,
+        "video_frames": 14
+      }
+    },
+    "landscape_animation": {
+      "description": "风景动画",
+      "parameters": {
+        "motion_bucket_id": 50,
+        "steps": 20,
+        "cfg": 2.0,
+        "video_frames": 25
+      }
+    },
+    "fast_preview": {
+      "description": "快速预览",
+      "parameters": {
+        "motion_bucket_id": 127,
+        "steps": 15,
+        "cfg": 2.0,
+        "video_frames": 14
+      }
+    }
+  }
+}

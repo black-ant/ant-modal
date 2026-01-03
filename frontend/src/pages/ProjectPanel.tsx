@@ -580,7 +580,7 @@ export default function ProjectPanel() {
       {/* Main Content */}
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Left: Script List */}
-        <Card className="w-56 shrink-0 p-3 flex flex-col">
+        <Card className="w-72 shrink-0 p-3 flex flex-col">
           <div className="flex justify-between items-center mb-2 shrink-0">
             <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
               <FileCode className="w-4 h-4 text-primary-500" />
@@ -773,6 +773,27 @@ export default function ProjectPanel() {
             <div className="flex justify-between items-center mb-2 shrink-0">
               <h2 className="text-sm font-semibold text-gray-800">💻 控制台</h2>
               <div className="flex items-center gap-1">
+                {/* 复制全文按钮 */}
+                <button
+                  onClick={() => {
+                    const fullText = output.join('\n');
+                    navigator.clipboard.writeText(fullText);
+                    // 可以添加一个临时提示
+                    const btn = document.activeElement as HTMLButtonElement;
+                    const originalTitle = btn?.title;
+                    if (btn) {
+                      btn.title = '已复制!';
+                      setTimeout(() => {
+                        btn.title = originalTitle || '复制全文';
+                      }, 2000);
+                    }
+                  }}
+                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  title="复制全文"
+                  disabled={output.length === 0}
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
                 {/* 搜索按钮 */}
                 <button
                   onClick={() => setShowConsoleSearch(!showConsoleSearch)}

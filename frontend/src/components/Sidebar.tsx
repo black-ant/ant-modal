@@ -38,7 +38,7 @@ export default function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="w-52 bg-white shadow-md flex flex-col h-screen">
+    <aside className="w-56 bg-white shadow-md flex flex-col h-screen">
       {/* Logo - 固定在顶部 */}
       <div className="px-4 py-4 border-b border-gray-200 flex-shrink-0">
         <h2 className="text-base font-bold text-primary-500 flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, Trash2, ArrowRight, X, Cloud, Pencil } from 'lucide-react';
+import { Plus, Folder, Trash2, ArrowRight, X, Cloud, Pencil, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -13,6 +13,7 @@ export default function ProjectList() {
   const [apps, setApps] = useState<main.ModalApp[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '', appId: '' });
   const [editProject, setEditProject] = useState({ id: '', name: '', description: '', appId: '' });
 
@@ -29,8 +30,13 @@ export default function ProjectList() {
   }, [showModal, apps]);
 
   const loadProjects = async () => {
-    const data = await GetProjects();
-    setProjects(data || []);
+    setIsRefreshing(true);
+    try {
+      const data = await GetProjects();
+      setProjects(data || []);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const loadApps = async () => {
@@ -114,9 +120,24 @@ export default function ProjectList() {
     <div className="animate-fade-in">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-800">我的项目</h1>
-          <p className="text-gray-500 text-xs">管理你的 Modal 云端项目</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <h1 className="text-lg font-bold text-gray-800">我的项目</h1>
+            <p className="text-gray-500 text-xs">管理你的 Modal 云端项目</p>
+          </div>
+          <button
+            onClick={loadProjects}
+            disabled={isRefreshing}
+            className={clsx(
+              "p-1.5 rounded-md transition-colors",
+              isRefreshing
+                ? "text-gray-300 cursor-not-allowed"
+                : "text-gray-400 hover:text-primary-500 hover:bg-primary-50"
+            )}
+            title="刷新项目列表"
+          >
+            <RefreshCw className={clsx("w-4 h-4", isRefreshing && "animate-spin")} />
+          </button>
         </div>
         <Button onClick={() => setShowModal(true)}>
           <Plus className="w-4 h-4 mr-1" />

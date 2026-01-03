@@ -265,15 +265,17 @@ app = modal.App(name="wan21-t2v-server", image=image)
 @app.function(
     max_containers=1,
     gpu="L40S",
-    volumes={"/cache": vol},
+    volumes={"/root": vol},  # 挂载到 /root，包含所有 ComfyUI 数据
     timeout=86400,
-    container_idle_timeout=600,
+    scaledown_window=600,
 )
 @modal.concurrent(max_inputs=1)
 @modal.web_server(UI_PORT, startup_timeout=180)
 def ui():
     """ComfyUI Web 界面 - Wan 2.1 T2V"""
     print(f"🎬 启动 Wan 2.1 T2V Web 界面 (端口: {UI_PORT})...")
+    # 确保必要的目录存在
+    Path("/root/comfy/ComfyUI/user/default/workflows").mkdir(parents=True, exist_ok=True)
     subprocess.Popen(f"comfy launch -- --listen 0.0.0.0 --port {UI_PORT}", shell=True)
 
 

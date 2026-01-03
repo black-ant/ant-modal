@@ -262,6 +262,66 @@ func (a *App) startup(ctx context.Context) {
 
 	// 执行数据迁移：将旧的绝对路径转换为相对路径
 	a.migrateAbsolutePathsToRelative()
+
+	// 执行数据迁移：将 ID 命名的文件夹重命名为项目名称
+	a.migrateProjectFoldersToName()
+}
+
+// migrateProjectFoldersToName 将 ID 命名的项目文件夹重命名为项目名称
+func (a *App) migrateProjectFoldersToName() {
+	projects := a.GetProjects()
+	if len(projects) == 0 {
+		return
+	}
+
+	needsSave := false
+	projectsBase := filepath.Join(a.projectsDir, "projects")
+
+	for i := range projects {
+		project := &projects[i]
+
+		// 检查路径是否是纯数字（ID格式）
+		isNumericPath := true
+		for _, c := range project.Path {
+			if c < '0' || c > '9' {
+				isNumericPath = false
+				break
+			}
+		}
+
+		// 如果路径是数字ID，且项目名称不为空，则重命名文件夹
+		if isNumericPath && project.Name != "" && project.Path != project.Name {
+			oldPath := filepath.Join(projectsBase, project.Path)
+			newPath := filepath.Join(projectsBase, project.Name)
+
+			// 检查旧路径是否存在
+			if _, err := os.Stat(oldPath); err == nil {
+				// 检查新路径是否已存在
+				if _, err := os.Stat(newPath); os.IsNotExist(err) {
+					// 重命名文件夹
+					if err := os.Rename(oldPath, newPath); err != nil {
+						a.LogError(fmt.Sprintf("重命名项目文件夹失败: %s -> %s, error=%v", oldPath, newPath, err))
+						continue
+					}
+					a.LogInfo(fmt.Sprintf("迁移项目文件夹: %s -> %s", project.Path, project.Name))
+					project.Path = project.Name
+					project.Code = project.Name // 同时更新 Code
+					needsSave = true
+				} else {
+					a.LogWarning(fmt.Sprintf("目标文件夹已存在，跳过迁移: %s", newPath))
+				}
+			}
+		}
+	}
+
+	// 如果有修改，保存项目配置
+	if needsSave {
+		if err := a.SaveProjects(projects); err != nil {
+			a.LogError(fmt.Sprintf("迁移数据保存失败: %v", err))
+		} else {
+			a.LogInfo("项目文件夹迁移完成：已将 ID 文件夹重命名为项目名称")
+		}
+	}
 }
 
 // migrateAbsolutePathsToRelative 将旧的绝对路径转换为相对路径
@@ -460,8 +520,8 @@ func (a *App) CreateProject(name, path, description, appId string) (*Project, er
 	// 存储相对路径，运行时动态计算绝对路径
 	var relativePath string
 	if path == "" {
-		// 使用项目ID作为相对路径
-		relativePath = projectID
+		// 使用项目名称作为相对路径（而不是ID）
+		relativePath = name
 		// 创建项目目录（使用绝对路径）
 		absolutePath := a.getProjectAbsolutePath(relativePath)
 		a.LogInfo(fmt.Sprintf("[CreateProject] 创建项目目录: %s", absolutePath))
@@ -516,6 +576,17 @@ func (a *App) DeleteProject(id string) error {
 		a.LogWarning(fmt.Sprintf("[DeleteProject] 项目不存在: id=%s", id))
 	} else {
 		a.LogInfo(fmt.Sprintf("[DeleteProject] 找到项目: name=%s, path=%s", deletedProject.Name, deletedProject.Path))
+
+		// 删除项目文件夹
+		projectAbsPath := a.getProjectAbsolutePath(deletedProject.Path)
+		if _, err := os.Stat(projectAbsPath); err == nil {
+			if err := os.RemoveAll(projectAbsPath); err != nil {
+				a.LogError(fmt.Sprintf("[DeleteProject] 删除项目文件夹失败: path=%s, error=%v", projectAbsPath, err))
+				// 继续执行，至少删除配置
+			} else {
+				a.LogInfo(fmt.Sprintf("[DeleteProject] 项目文件夹已删除: %s", projectAbsPath))
+			}
+		}
 	}
 
 	if err := a.SaveProjects(newProjects); err != nil {
@@ -640,12 +711,12 @@ func (a *App) SetGlobalVariables(variables map[string]string) error {
 func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (*Project, error) {
 	a.LogInfo(fmt.Sprintf("[TemplateCreate] 开始从模板创建项目: templateId=%s, projectName=%s, appId=%s", templateId, projectName, appId))
 
-	// 生成项目ID（同时作为相对路径）
+	// 生成项目ID（用于唯一标识）
 	projectID := fmt.Sprintf("%d", time.Now().UnixNano())
-	// 绝对路径用于创建目录和复制文件
-	projectAbsPath := a.getProjectAbsolutePath(projectID)
+	// 使用项目名称作为文件夹名（而不是ID）
+	projectAbsPath := a.getProjectAbsolutePath(projectName)
 
-	a.LogInfo(fmt.Sprintf("[TemplateCreate] 项目路径: id=%s, absPath=%s", projectID, projectAbsPath))
+	a.LogInfo(fmt.Sprintf("[TemplateCreate] 项目路径: id=%s, name=%s, absPath=%s", projectID, projectName, projectAbsPath))
 
 	// 创建项目目录
 	if err := os.MkdirAll(projectAbsPath, 0755); err != nil {
@@ -730,7 +801,7 @@ func (a *App) CreateProjectFromTemplate(templateId, projectName, appId string) (
 	project := Project{
 		ID:          projectID,
 		Name:        projectName,
-		Path:        projectID, // 存储相对路径（即项目ID）
+		Path:        projectName, // 使用项目名称作为相对路径
 		Description: description,
 		AppID:       appId,
 		Status:      "stopped",
@@ -1286,16 +1357,22 @@ func (a *App) GetScripts(projectPath string) []Script {
 			return nil
 		}
 		if !info.IsDir() && strings.HasSuffix(info.Name(), ".py") {
+			// 跳过临时文件
+			if strings.HasPrefix(info.Name(), "_temp_") || strings.HasPrefix(info.Name(), ".") {
+				return nil
+			}
 			relPath, _ := filepath.Rel(projectAbsPath, path)
 			// 只添加未配置的脚本
 			if !configuredPaths[relPath] {
 				a.LogInfo(fmt.Sprintf("[GetScripts] 发现新脚本: %s", relPath))
 				newScriptsCount++
+				// 从文件中提取中文名称和描述
+				scriptName, scriptDesc := a.extractScriptMetadata(path, info.Name())
 				validScripts = append(validScripts, Script{
-					Name:        info.Name(),
+					Name:        scriptName,
 					Path:        relPath,
 					FullPath:    path,
-					Description: "",
+					Description: scriptDesc,
 					Order:       len(validScripts),
 				})
 			}
@@ -1305,6 +1382,76 @@ func (a *App) GetScripts(projectPath string) []Script {
 	a.LogInfo(fmt.Sprintf("[GetScripts] 新发现的脚本数量=%d, 总脚本数量=%d", newScriptsCount, len(validScripts)))
 
 	return validScripts
+}
+
+// extractScriptMetadata 从 Python 文件中提取脚本名称和描述
+// 解析文件开头的文档字符串，提取中文名称
+func (a *App) extractScriptMetadata(filePath string, defaultName string) (string, string) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return defaultName, ""
+	}
+
+	text := string(content)
+
+	var name, description string
+
+	// 匹配三引号文档字符串 (""" 或 ''')
+	docstringPattern := regexp.MustCompile(`(?s)^[^"']*(?:"""|\'\'\')(.*?)(?:"""|\'\'\')|^#\s*(.+)`)
+	matches := docstringPattern.FindStringSubmatch(text)
+
+	if len(matches) > 1 && matches[1] != "" {
+		// 解析文档字符串内容
+		docContent := strings.TrimSpace(matches[1])
+		lines := strings.Split(docContent, "\n")
+
+		// 分隔线正则
+		separatorPattern := regexp.MustCompile(`^[=\-]{3,}$`)
+
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			// 跳过空行和分隔线 (=== 或 ---)
+			if line == "" || separatorPattern.MatchString(line) {
+				continue
+			}
+			// 第一个非空非分隔线就是标题
+			name = line
+			break
+		}
+
+		// 提取描述（标题后的第一段非空文本）
+		foundTitle := false
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || separatorPattern.MatchString(line) {
+				if foundTitle {
+					break
+				}
+				continue
+			}
+			if !foundTitle {
+				foundTitle = true
+				continue
+			}
+			// 跳过以特殊字符开头的行（如 ⚠️、功能说明等）
+			if !strings.HasPrefix(line, "⚠") && !strings.HasPrefix(line, "使用方法") && !strings.HasPrefix(line, "功能说明") {
+				description = line
+				break
+			}
+		}
+	} else if len(matches) > 2 && matches[2] != "" {
+		// 匹配 # 注释
+		name = strings.TrimSpace(matches[2])
+	}
+
+	// 如果没有提取到名称，使用默认文件名（去掉 .py 后缀）
+	if name == "" {
+		name = strings.TrimSuffix(defaultName, ".py")
+		// 将下划线替换为空格
+		name = strings.ReplaceAll(name, "_", " ")
+	}
+
+	return name, description
 }
 
 // RunModalCommand 执行Modal命令
